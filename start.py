@@ -3,12 +3,50 @@ import os
 import shutil
 import sys
 import time
-from tqdm import tqdm
 from typing import List
-from easydict import EasyDict as edict
-from ymir_exc import dataset_reader as dr, env, monitor, result_writer as rw
-import torchvision
+
 import torch
+import torchvision
+import yaml
+from easydict import EasyDict as edict
+from tqdm import tqdm
+from ymir_exc import dataset_reader as dr
+from ymir_exc import env, monitor
+from ymir_exc import result_writer as rw
+
+
+def get_code_config() -> dict:
+    executor_config=env.get_executor_config()
+    code_config_file = executor_config.get('code_config',None)
+
+    assert 'git_url' in executor_config,f'cannot find git_url in {executor_config}'
+    remote_config=dict(git_url=executor_config['git_url'],
+        git_branch=executor_config.get('git_branch','master'),
+        code_config_file=executor_config.get('code_config',None))
+
+    if code_config_file == '' or code_config_file is None:
+        return dict()
+    elif not os.path.exists(code_config_file):
+        git_url=remote_config['git_url']
+        git_branch=remote_config['git_branch']
+        logging.info(f'please pull the code {git_url} with branch {git_branch} first')
+        assert False, f"cannot find code config {code_config_file}"
+    else:
+        with open(code_config_file, 'r') as f:
+            return yaml.safe_load(f)
+
+def get_merged_config() -> dict:
+    """
+    merge executor_config and code_config
+    """
+
+    ### exe_cfg overwrite code_cfg
+    exe_cfg = env.get_executor_config()
+    code_cfg = get_code_config()
+
+    exe_cfg.update(code_cfg)
+
+    return exe_cfg
 
 def start() -> int:
     env_config = env.get_current_env()
@@ -34,7 +72,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
     4. how to write training result
     """
     #! use `env.get_merged_config` to get config file for training
-    executor_config = env.get_merged_config()
+    executor_config = get_merged_config()
     class_names: List[str] = executor_config['class_names']
     expected_mAP: float = executor_config.get('map', 0.6)
     epoch: int = executor_config.get('epoch', 10)
@@ -91,7 +129,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
 
 def _run_mining(env_config: env.EnvConfig) -> None:
      #! use `env.get_merged_config` to get config file for training
-    executor_config = env.get_merged_config()
+    executor_config = get_merged_config()
     epoch: int = executor_config.get('epoch', 10)
 
     config = edict(epoch=epoch)
@@ -127,7 +165,7 @@ def _run_mining(env_config: env.EnvConfig) -> None:
 
 def _run_infer(env_config: env.EnvConfig) -> None:
      #! use `env.get_merged_config` to get config file for training
-    executor_config = env.get_merged_config()
+    executor_config = get_merged_config()
     class_names: List[str] = executor_config['class_names']
     epoch: int = executor_config.get('epoch', 10)
 
