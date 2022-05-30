@@ -16,7 +16,7 @@ from ymir_exc import result_writer as rw
 
 from models.common import DetectMultiBackend
 from utils.augmentations import letterbox
-from utils.datasets import img2label_paths
+from utils.dataloaders import img2label_paths
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 
@@ -26,9 +26,34 @@ ymir_process_config = dict(
     task=0.8,
     postprocess=0.1)
 
+def get_code_config() -> dict:
+    executor_config=env.get_executor_config()
+    code_config_file = executor_config.get('code_config',None)
+
+    # if code_config_file == '' or code_config_file is None:
+    if not code_config_file:
+        return dict()
+
+    elif not os.path.exists(code_config_file):
+        assert False, f"cannot find code config {code_config_file}"
+    else:
+        with open(code_config_file, 'r') as f:
+            return yaml.safe_load(f)
+
+def get_universal_config() -> dict:
+    """
+    merge executor_config and code_config
+    """
+
+    ### exe_cfg overwrite code_cfg
+    exe_cfg = env.get_executor_config()
+    code_cfg = get_code_config()
+
+    exe_cfg.update(code_cfg)
+    return exe_cfg
 
 def get_weight_file() -> str:
-    executor_config = env.get_universal_config()
+    executor_config = get_universal_config()
     path_config = env.get_current_env()
 
     weights = None
@@ -36,6 +61,8 @@ def get_weight_file() -> str:
     model_dir = osp.join(path_config.input.root_dir,
                          path_config.input.models_dir)
     model_params_path = [p for p in model_params_path if osp.exists(osp.join(model_dir, p))]
+
+    # choose weight file by priority, best.pt > xxx.pt > f'{model_name}'.pt
     if 'best.pt' in model_params_path:
         weights = osp.join(model_dir, 'best.pt')
     else:
@@ -45,14 +72,14 @@ def get_weight_file() -> str:
                 break
 
     if weights is None:
-        model_name = env.get_universal_config()['model']
+        model_name = get_universal_config()['model']
         weights = f'{model_name}.pt'
         logger.info(f'cannot find pytorch weight in {model_params_path}, use {weights} instead')
 
     return weights
 
 
-class Ymir_Yolov5():
+class YmirYolov5():
     def __init__(self):
         executor_config = env.get_executor_config()
         gpu_id = executor_config.get('gpu_id', '0')
@@ -115,7 +142,7 @@ class Ymir_Yolov5():
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
 
         result = []
-        for i, det in enumerate(pred):
+        for det in pred:
             if len(det):
                 # Rescale boxes from img_size to img size
                 det[:, :4] = scale_coords(img1.shape[2:], det[:, :4], img.shape).round()
@@ -144,14 +171,21 @@ class Ymir_Yolov5():
         return anns
 
 
-def digit(x):
-    if x < 10:
-        return 1
-    else:
-        return 1 + digit(x // 10)
+def digit(x: int) -> int:
+    """
+    求整数10进制的位数
+    """
+    i=1
+    while x>=10:
+        x=x//10
+        i=i+1
+    return i
 
 
 def convert_ymir_to_yolov5(root_dir, args=None):
+    """
+    convert ymir format dataset to yolov5 format
+    """
     os.makedirs(root_dir, exist_ok=True)
     os.makedirs(osp.join(root_dir, 'images'), exist_ok=True)
     os.makedirs(osp.join(root_dir, 'labels'), exist_ok=True)
@@ -195,8 +229,9 @@ def convert_ymir_to_yolov5(root_dir, args=None):
 
             assert osp.exists(asset_path), f'cannot find {asset_path}'
 
-            # valid data.yaml for training task
-            # invalid data.yaml for infer and mining task
+            # only copy image for training task
+            # valid train.txt, val.txt and invalid test.txt for training task
+            # invalid train.txt, val.txt and test.txt for infer and mining task
             if split in ['train', 'val']:
                 annotation_path = osp.join(path_env.input.root_dir, path_env.input.annotations_dir, annotation_path)
                 assert osp.exists(annotation_path), f'cannot find {annotation_path}'
@@ -227,7 +262,7 @@ def convert_ymir_to_yolov5(root_dir, args=None):
         with open(osp.join(root_dir, f'{split}.txt'), 'w') as fw:
             fw.write('\n'.join(split_imgs))
 
-    # generate yaml
+    # generate data.yaml for training/mining/infer
     config = env.get_executor_config()
     data = dict(path=root_dir,
                 train="train.txt",
@@ -243,14 +278,16 @@ def convert_ymir_to_yolov5(root_dir, args=None):
 def write_ymir_training_result(results, maps, rewrite=False):
     """
     results: (mp, mr, map50, map, loss)
+    maps: map for all class
     """
     if not rewrite:
         training_result_file = env.get_current_env().output.training_result_file
         if osp.exists(training_result_file):
             return 0
 
-    model = env.get_universal_config()['model']
-    class_names = env.get_universal_config()['class_names']
+    executor_config = get_universal_config()
+    model = executor_config['model']
+    class_names = executor_config['class_names']
     map50 = maps
 
     # use `rw.write_training_result` to save training result

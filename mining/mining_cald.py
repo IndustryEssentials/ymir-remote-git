@@ -3,44 +3,17 @@ import sys
 
 import cv2
 import numpy as np
+from scipy.stats import entropy
+from tqdm import tqdm
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
-from loguru import logger
-from scipy.stats import entropy
-from tqdm import tqdm
 
 from mining.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from models.common import DetectMultiBackend
-from utils.ymir_yolov5 import Ymir_Yolov5
+from utils.ymir_yolov5 import YmirYolov5
 
 
-def init_detector(device):
-    executor_config = env.get_executor_config()
-
-    weights = None
-    model_params_path = executor_config['model_params_path']
-    if 'best.pt' in model_params_path:
-        weights = '/in/models/best.pt'
-    else:
-        for f in model_params_path:
-            if f.endswith('.pt'):
-                weights = f'/in/models/{f}'
-                break
-
-    if weights is None:
-        weights = 'yolov5s.pt'
-        logger.info(f'cannot find pytorch weight in {model_params_path}, use {weights} instead')
-
-    model = DetectMultiBackend(weights=weights,
-                               device=device,
-                               dnn=False,  # not use opencv dnn for onnx inference
-                               data='data.yaml')  # dataset.yaml path
-
-    return model
-
-
-class MiningCald(Ymir_Yolov5):
+class MiningCald(YmirYolov5):
     def mining(self):
         def split_result(result):
             if len(result) > 0:

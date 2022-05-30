@@ -1,10 +1,8 @@
-import argparse
 import logging
 import os.path as osp
 import shutil
 import subprocess
 import sys
-from typing import List
 
 import cv2
 from loguru import logger
@@ -12,18 +10,9 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from utils.ymir_yolov5 import Ymir_Yolov5, convert_ymir_to_yolov5, get_weight_file, ymir_process_config
-
-
-def get_args():
-    parser = argparse.ArgumentParser('debug ...')
-    parser.add_argument('--app', default=None,
-                        help='training, mining or infer',
-                        choices=['training', 'mining', 'infer'])
-    parser.add_argument('--cfg', default=None,
-                        help='set the /in/config.yaml')
-
-    return parser.parse_args()
+from utils.ymir_yolov5 import (YmirYolov5, convert_ymir_to_yolov5,
+                               get_weight_file, ymir_process_config,
+                               get_universal_config)
 
 
 def start() -> int:
@@ -33,29 +22,14 @@ def start() -> int:
 
     logger.info(f'env_config: {env_config}')
 
-    args = get_args()
-    logger.info(f'args: {args}')
-
-    if args.cfg is not None:
-        default_cfg_file = env_config.input.config_file
-
-        if osp.exists(default_cfg_file):
-            shutil.copy(default_cfg_file, default_cfg_file + '.backup')
-
-        shutil.copy(args.cfg, default_cfg_file)
-
-    if args.app == 'training':
-        _run_training(env_config)
-    elif args.app == 'mining':
-        _run_mining(env_config)
-    elif args.app == 'infer':
-        _run_infer(env_config)
-    elif env_config.run_training:
+    if env_config.run_training:
         _run_training(env_config)
     elif env_config.run_mining:
         _run_mining(env_config)
     elif env_config.run_infer:
         _run_infer(env_config)
+    else:
+        logger.warning('no task running')
 
     return 0
 
@@ -69,7 +43,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
     4. how to write training result
     """
     # use `env.get_executor_config` to get config file for training
-    executor_config = env.get_universal_config()
+    executor_config = get_universal_config()
 
     # use `logging` or `print` to write log to console
     #   notice that logging.basicConfig is invoked at executor.env
@@ -166,7 +140,7 @@ def _run_infer(env_config: env.EnvConfig) -> None:
     logging.info(f"assets count: {N}")
 
     infer_result = dict()
-    model = Ymir_Yolov5()
+    model = YmirYolov5()
     idx = 0
     for asset_path, _ in dr.item_paths(dataset_type=env.DatasetType.CANDIDATE):
         img_path = osp.join(env_config.input.root_dir, env_config.input.assets_dir, asset_path)
