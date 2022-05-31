@@ -139,7 +139,7 @@ def _run_mining(env_config: env.EnvConfig) -> None:
     executor_config = get_merged_config()
     epoch: int = executor_config.get('epoch', 10)
 
-    weight_files = executor_config['pretrained_model_paths']
+    weight_files = executor_config['model_params_path']
     models_dir = env_config.input.models_dir
     weight_files = [os.path.join(models_dir, f) for f in weight_files]
     logging.info(f'use weight files {weight_files}')
@@ -182,7 +182,7 @@ def _run_infer(env_config: env.EnvConfig) -> None:
     class_names: List[str] = executor_config['class_names']
     epoch: int = executor_config.get('epoch', 10)
 
-    weight_files = executor_config['pretrained_model_paths']
+    weight_files = executor_config['model_params_path']
     models_dir = env_config.input.models_dir
     weight_files = [os.path.join(models_dir, f) for f in weight_files]
     logging.info(f'use weight files {weight_files}')
