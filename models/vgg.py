@@ -39,10 +39,10 @@ def make_layers(cfg, batch_norm=False):
 
 
 cfg = {
-    'A': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-    'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-    'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
-    'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+    'A': [64, 'M', 128, 'M', 256, 256, 'M',
+          512, 512, 'M', 512, 512, 'M'],
+    'B': [64, 64, 'M', 128, 128, 'M', 256, 256,
+          'M', 512, 512, 'M', 512, 512, 'M'],
 }
 
 
@@ -64,23 +64,3 @@ def vgg13():
 def vgg13_bn():
     """VGG 13-layer model (configuration "B") with batch normalization"""
     return VGG(make_layers(cfg['B'], batch_norm=True))
-
-
-def vgg16():
-    """VGG 11-layer model (configuration "B")"""
-    return VGG(make_layers(cfg['D']))
-
-
-def vgg16_bn():
-    """VGG 16-layer model (configuration "D") with batch normalization"""
-    return VGG(make_layers(cfg['D'], batch_norm=True))
-
-
-def vgg19():
-    """VGG 19-layer model (configuration "D")"""
-    return VGG(make_layers(cfg['E']))
-
-
-def vgg19_bn():
-    """VGG 19-layer model (configuration 'E') with batch normalization"""
-    return VGG(make_layers(cfg['E'], batch_norm=True))
