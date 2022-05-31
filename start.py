@@ -106,6 +106,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
     else:
         m = torchvision.models.vgg13(pretrained=False)
 
+    os.makedirs(env_config.output.models_dir,exist_ok=True)
     torch.save(m,os.path.join(env_config.output.models_dir,f'{model}.pt'))
 
     # write other information

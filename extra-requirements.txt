@@ -1,1 +1,6 @@
 easydict
+torch
+torchvision
+PyYAML
+tqdm
+ymir-exc
