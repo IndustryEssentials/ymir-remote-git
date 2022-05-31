@@ -55,7 +55,7 @@ from utils.loss import ComputeLoss
 from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
-from utils.ymir_yolov5 import ymir_process_config,write_ymir_training_result
+from utils.ymir_yolov5 import write_ymir_training_result, PREPROCESS_PERCENT, TASK_PERCENT
 from ymir_exc import monitor
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
@@ -304,12 +304,16 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
+
+    monitor_gap = max(1, (epochs - start_epoch + 1) // 100)
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         callbacks.run('on_train_epoch_start')
         model.train()
 
         # ymir monitor
-        monitor.write_monitor_logger(percent=ymir_process_config['preprocess']+ymir_process_config['task']*epoch/epochs)
+        if epoch % monitor_gap == 0:
+            percent = PREPROCESS_PERCENT + TASK_PERCENT * epoch / (epochs - start_epoch + 1)
+            monitor.write_monitor_logger(percent=percent)
 
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:

@@ -15,32 +15,30 @@ from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
 from models.common import DetectMultiBackend
+from models.experimental import attempt_download
 from utils.augmentations import letterbox
 from utils.dataloaders import img2label_paths
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 
 # const value for process
-ymir_process_config = dict(
-    preprocess=0.1,
-    task=0.8,
-    postprocess=0.1)
+PREPROCESS_PERCENT = 0.1
+TASK_PERCENT = 0.9
+POSTPROCESS_PERCENT = 1.0
 
 def get_code_config() -> dict:
     executor_config=env.get_executor_config()
-    code_config_file = executor_config.get('code_config',None)
+    code_config_file = executor_config.get('code_config','')
 
-    # if code_config_file == '' or code_config_file is None:
     if not code_config_file:
         return dict()
-
     elif not os.path.exists(code_config_file):
         assert False, f"cannot find code config {code_config_file}"
     else:
         with open(code_config_file, 'r') as f:
             return yaml.safe_load(f)
 
-def get_universal_config() -> dict:
+def get_merged_config() -> dict:
     """
     merge executor_config and code_config
     """
@@ -52,36 +50,42 @@ def get_universal_config() -> dict:
     exe_cfg.update(code_cfg)
     return exe_cfg
 
-def get_weight_file() -> str:
-    executor_config = get_universal_config()
+def get_weight_file(try_download=True) -> str:
+    """
+    return the weight file path by priority
+
+    1. executor_config['model_params_path']
+    2. if try_download and no weight file offered
+            yolov5 will download it from github.
+    """
+    executor_config = get_merged_config()
     path_config = env.get_current_env()
 
-    weights = None
     model_params_path = executor_config['model_params_path']
     model_dir = osp.join(path_config.input.root_dir,
                          path_config.input.models_dir)
     model_params_path = [p for p in model_params_path if osp.exists(osp.join(model_dir, p))]
 
-    # choose weight file by priority, best.pt > xxx.pt > f'{model_name}'.pt
+    # choose weight file by priority, best.pt > xxx.pt > f'{model_name}.pt'
     if 'best.pt' in model_params_path:
-        weights = osp.join(model_dir, 'best.pt')
+        return osp.join(model_dir, 'best.pt')
     else:
         for f in model_params_path:
             if f.endswith('.pt'):
-                weights = osp.join(model_dir, f)
-                break
+                return osp.join(model_dir, f)
 
-    if weights is None:
-        model_name = get_universal_config()['model']
-        weights = f'{model_name}.pt'
-        logger.info(f'cannot find pytorch weight in {model_params_path}, use {weights} instead')
-
-    return weights
+    # if no weight file offered
+    if try_download:
+        model_name = get_merged_config()['model']
+        weights = attempt_download(f'{model_name}.pt')
+        return weights
+    else:
+        return ''
 
 
 class YmirYolov5():
     def __init__(self):
-        executor_config = env.get_executor_config()
+        executor_config = get_merged_config()
         gpu_id = executor_config.get('gpu_id', '0')
         gpu_num = len(gpu_id.split(','))
         if gpu_num == 0:
@@ -93,9 +97,10 @@ class YmirYolov5():
         self.model = self.init_detector(device)
         self.device = device
         self.class_names = executor_config['class_names']
-
         self.stride = self.model.stride
-        imgsz = (640, 640)
+
+        img_size = executor_config['img_size']
+        imgsz = (img_size, img_size)
         imgsz = check_img_size(imgsz, s=self.stride)
         # Run inference
         self.model.warmup(imgsz=(1, 3, *imgsz), half=False)  # warmup
@@ -103,10 +108,7 @@ class YmirYolov5():
         self.img_size = imgsz
 
     def init_detector(self, device):
-        weights = get_weight_file()
-
-        if not osp.exists(weights):
-            logger.info(f'try to download {weights} ' + '.' * 30)
+        weights = get_weight_file(try_download=True)
 
         model = DetectMultiBackend(weights=weights,
                                    device=device,
@@ -224,7 +226,7 @@ def convert_ymir_to_yolov5(root_dir, args=None):
         split_imgs = []
         for asset_path, annotation_path in dr.item_paths(dataset_type=DatasetTypeDict[split]):
             idx += 1
-            monitor.write_monitor_logger(percent=ymir_process_config['preprocess'] * idx / N)
+            monitor.write_monitor_logger(percent=PREPROCESS_PERCENT * idx / N)
             asset_path = osp.join(path_env.input.root_dir, path_env.input.assets_dir, asset_path)
 
             assert osp.exists(asset_path), f'cannot find {asset_path}'
@@ -285,7 +287,7 @@ def write_ymir_training_result(results, maps, rewrite=False):
         if osp.exists(training_result_file):
             return 0
 
-    executor_config = get_universal_config()
+    executor_config = get_merged_config()
     model = executor_config['model']
     class_names = executor_config['class_names']
     map50 = maps

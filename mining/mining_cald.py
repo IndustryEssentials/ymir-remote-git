@@ -10,7 +10,7 @@ from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
 from mining.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from utils.ymir_yolov5 import YmirYolov5
+from utils.ymir_yolov5 import YmirYolov5, POSTPROCESS_PERCENT, TASK_PERCENT
 
 
 class MiningCald(YmirYolov5):
@@ -29,7 +29,8 @@ class MiningCald(YmirYolov5):
 
         path_env = env.get_current_env()
         N = dr.items_count(env.DatasetType.CANDIDATE)
-        idx = 0
+        monitor_gap = max(1, N // 100)
+        idx = -1
         beta = 1.3
         mining_result = []
         for asset_path, _ in tqdm(dr.item_paths(dataset_type=env.DatasetType.CANDIDATE)):
@@ -80,7 +81,10 @@ class MiningCald(YmirYolov5):
 
             mining_result.append((asset_path, consistency))
             idx += 1
-            monitor.write_monitor_logger(percent=0.1 + 0.8 * idx / N)
+
+            if idx % monitor_gap == 0:
+                percent = POSTPROCESS_PERCENT + TASK_PERCENT * idx / N
+                monitor.write_monitor_logger(percent=percent)
 
         return mining_result
 
