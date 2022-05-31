@@ -1,4 +1,5 @@
 import logging
+import os
 import os.path as osp
 import shutil
 import subprocess
@@ -9,13 +10,8 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from utils.ymir_yolov5 import (YmirYolov5,
-                               convert_ymir_to_yolov5,
-                               get_weight_file,
-                               PREPROCESS_PERCENT,
-                               TASK_PERCENT,
-                               POSTPROCESS_PERCENT,
-                               get_merged_config)
+from utils.ymir_yolov5 import (POSTPROCESS_PERCENT, PREPROCESS_PERCENT, TASK_PERCENT, YmirYolov5,
+                               convert_ymir_to_yolov5, get_merged_config, get_weight_file)
 
 
 def start() -> int:
@@ -62,7 +58,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
     weights = get_weight_file(try_download=True)
 
     models_dir = env_config.output.models_dir
-    command = f'python train.py --epochs {epochs} ' + \
+    command = f'python3 train.py --epochs {epochs} ' + \
         f'--batch-size {batch_size} --data data.yaml --project /out ' + \
         f'--cfg models/{model}.yaml --name models --weights {weights} ' + \
         f'--img-size {img_size} --hyp data/hyps/hyp.scratch-low.yaml ' + \
@@ -76,7 +72,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
 
     # 4. convert to onnx and save model weight to design directory
     opset = executor_config['opset']
-    command = f'python export.py --weights {models_dir}/best.pt --opset {opset} --include onnx'
+    command = f'python3 export.py --weights {models_dir}/best.pt --opset {opset} --include onnx'
     logging.info(f'export onnx weight: {command}')
     subprocess.check_output(command.split())
 
@@ -96,7 +92,7 @@ def _run_mining(env_config: env.EnvConfig) -> None:
     convert_ymir_to_yolov5(out_dir)
     monitor.write_monitor_logger(percent=PREPROCESS_PERCENT)
 
-    command = 'python mining/mining_cald.py'
+    command = 'python3 mining/mining_cald.py'
     logging.info(f'mining: {command}')
     subprocess.check_output(command.split())
     monitor.write_monitor_logger(percent=1.0)
@@ -137,4 +133,6 @@ if __name__ == '__main__':
                         format='%(levelname)-8s: [%(asctime)s] %(message)s',
                         datefmt='%Y%m%d-%H:%M:%S',
                         level=logging.INFO)
+
+    os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
     sys.exit(start())

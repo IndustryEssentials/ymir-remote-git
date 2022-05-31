@@ -47,8 +47,8 @@ def get_merged_config() -> dict:
     exe_cfg = env.get_executor_config()
     code_cfg = get_code_config()
 
-    exe_cfg.update(code_cfg)
-    return exe_cfg
+    code_cfg.update(exe_cfg)
+    return code_cfg
 
 def get_weight_file(try_download=True) -> str:
     """
@@ -61,7 +61,12 @@ def get_weight_file(try_download=True) -> str:
     executor_config = get_merged_config()
     path_config = env.get_current_env()
 
-    model_params_path = executor_config['model_params_path']
+    env_config = env.get_current_env()
+    if env_config.run_training:
+        model_params_path = executor_config['pretrained_model_paths']
+    else:
+        model_params_path = executor_config['model_params_path']
+
     model_dir = osp.join(path_config.input.root_dir,
                          path_config.input.models_dir)
     model_params_path = [p for p in model_params_path if osp.exists(osp.join(model_dir, p))]
