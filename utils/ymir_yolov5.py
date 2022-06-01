@@ -111,7 +111,7 @@ class YmirYolov5():
         imgsz = (img_size, img_size)
         imgsz = check_img_size(imgsz, s=self.stride)
         # Run inference
-        self.model.warmup(imgsz=(1, 3, *imgsz), half=False)  # warmup
+        self.model.warmup(imgsz=(1, 3, *imgsz))  # warmup
 
         self.img_size = imgsz
 
