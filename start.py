@@ -10,7 +10,7 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from utils.ymir_yolov5 import (POSTPROCESS_PERCENT, PREPROCESS_PERCENT, TASK_PERCENT, YmirYolov5,
+from utils.ymir_yolov5 import (PREPROCESS_PERCENT, TASK_PERCENT, YmirYolov5,
                                convert_ymir_to_yolov5, get_merged_config, get_weight_file)
 
 
@@ -63,10 +63,8 @@ def _run_training(env_config: env.EnvConfig) -> None:
         f'--cfg models/{model}.yaml --name models --weights {weights} ' + \
         f'--img-size {img_size} --hyp data/hyps/hyp.scratch-low.yaml ' + \
         '--exist-ok'
-    # use `monitor.write_monitor_logger` to write write task process percent to monitor.txt
     logging.info(f'start training: {command}')
 
-    # os.system(command)
     subprocess.check_output(command.split())
     monitor.write_monitor_logger(percent=PREPROCESS_PERCENT + TASK_PERCENT)
 
