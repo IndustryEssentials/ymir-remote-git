@@ -25,7 +25,8 @@ def get_code_config() -> dict:
                                  'git_branch', 'master'),
                              code_config=code_config_file)
 
-        if code_config_file == '' or code_config_file is None:
+        # if code_config_file == '' or code_config_file is None:
+        if not code_config_file:
             return dict()
         else:
             with open(code_config_file, 'r') as f:
