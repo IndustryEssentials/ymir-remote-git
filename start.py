@@ -9,6 +9,7 @@ import torch
 import torchvision
 import yaml
 from easydict import EasyDict as edict
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
@@ -44,10 +45,8 @@ def get_merged_config() -> dict:
     # exe_cfg overwrite code_cfg
     exe_cfg = env.get_executor_config()
     code_cfg = get_code_config()
-
-    exe_cfg.update(code_cfg)
-
-    return exe_cfg
+    code_cfg.update(exe_cfg)
+    return code_cfg
 
 
 def start() -> int:
@@ -224,7 +223,13 @@ def _run_infer(env_config: env.EnvConfig) -> None:
 
 
 def _dummy_work(config: edict) -> None:
+    env_config = env.get_current_env()
+    if env_config.run_training:
+        tb_log = SummaryWriter(env_config.output.tensorboard_dir)
+
     for e in tqdm(range(config.epoch)):
+        if env_config.run_training:
+            tb_log.add_scalar("fake_loss", 10/e, e)
         time.sleep(1)
         monitor.write_monitor_logger(percent=e/config.epoch)
 
