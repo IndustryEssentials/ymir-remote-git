@@ -26,9 +26,10 @@ PREPROCESS_PERCENT = 0.1
 TASK_PERCENT = 0.9
 POSTPROCESS_PERCENT = 1.0
 
+
 def get_code_config() -> dict:
-    executor_config=env.get_executor_config()
-    code_config_file = executor_config.get('code_config','')
+    executor_config = env.get_executor_config()
+    code_config_file = executor_config.get('code_config', '')
 
     if not code_config_file:
         return dict()
@@ -38,17 +39,19 @@ def get_code_config() -> dict:
         with open(code_config_file, 'r') as f:
             return yaml.safe_load(f)
 
+
 def get_merged_config() -> dict:
     """
     merge executor_config and code_config
     """
 
-    ### exe_cfg overwrite code_cfg
+    # exe_cfg overwrite code_cfg
     exe_cfg = env.get_executor_config()
     code_cfg = get_code_config()
 
     code_cfg.update(exe_cfg)
     return code_cfg
+
 
 def get_weight_file(try_download=True) -> str:
     """
@@ -182,10 +185,10 @@ def digit(x: int) -> int:
     """
     求整数10进制的位数
     """
-    i=1
-    while x>=10:
-        x=x//10
-        i=i+1
+    i = 1
+    while x >= 10:
+        x = x // 10
+        i = i + 1
     return i
 
 
@@ -226,12 +229,14 @@ def convert_ymir_to_yolov5(root_dir, args=None):
                            test=env.DatasetType.CANDIDATE)
 
     digit_num = digit(N)
+    monitor_gap = max(1, N // 10)
     path_env = env.get_current_env()
     for split in splits:
         split_imgs = []
         for asset_path, annotation_path in dr.item_paths(dataset_type=DatasetTypeDict[split]):
             idx += 1
-            monitor.write_monitor_logger(percent=PREPROCESS_PERCENT * idx / N)
+            if idx % monitor_gap == 0:
+                monitor.write_monitor_logger(percent=PREPROCESS_PERCENT * idx / N)
             asset_path = osp.join(path_env.input.root_dir, path_env.input.assets_dir, asset_path)
 
             assert osp.exists(asset_path), f'cannot find {asset_path}'
@@ -265,9 +270,10 @@ def convert_ymir_to_yolov5(root_dir, args=None):
                             h = (ymax - ymin) / height
                             fw.write(f'{class_id} {xc} {yc} {w} {h}\n')
 
-            split_imgs.append(img_path)
-        with open(osp.join(root_dir, f'{split}.txt'), 'w') as fw:
-            fw.write('\n'.join(split_imgs))
+                split_imgs.append(img_path)
+        if split in ['train', 'val']:
+            with open(osp.join(root_dir, f'{split}.txt'), 'w') as fw:
+                fw.write('\n'.join(split_imgs))
 
     # generate data.yaml for training/mining/infer
     config = env.get_executor_config()
