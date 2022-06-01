@@ -128,9 +128,10 @@ class YmirYolov5():
         return model
 
     def predict(self, img):
-        # preprocess
-        # img0 = cv2.imread(path)  # BGR
-        # Padded resize
+        """
+        img: opencv BGR, uint8 format
+        """
+        # preprocess: padded resize
         img1 = letterbox(img, self.img_size, stride=self.stride, auto=True)[0]
 
         # Convert
@@ -194,36 +195,28 @@ def digit(x: int) -> int:
     return i
 
 
-def convert_ymir_to_yolov5(root_dir, args=None):
+def convert_ymir_to_yolov5(output_root_dir):
     """
     convert ymir format dataset to yolov5 format
+    root_dir: the output dir
     """
-    os.makedirs(root_dir, exist_ok=True)
-    os.makedirs(osp.join(root_dir, 'images'), exist_ok=True)
-    os.makedirs(osp.join(root_dir, 'labels'), exist_ok=True)
+    os.makedirs(output_root_dir, exist_ok=True)
+    os.makedirs(osp.join(output_root_dir, 'images'), exist_ok=True)
+    os.makedirs(osp.join(output_root_dir, 'labels'), exist_ok=True)
 
-    if args is None:
-        env_config = env.get_current_env()
-        if env_config.run_training:
-            train_data_size = dr.items_count(env.DatasetType.TRAINING)
-            val_data_size = dr.items_count(env.DatasetType.VALIDATION)
-            N = len(str(train_data_size + val_data_size))
-            splits = ['train', 'val']
-        elif env_config.run_mining:
-            N = dr.items_count(env.DatasetType.CANDIDATE)
-            splits = ['test']
-        elif env_config.run_infer:
-            N = dr.items_count(env.DatasetType.CANDIDATE)
-            splits = ['test']
-    else:
-        if args.app == 'training':
-            train_data_size = dr.items_count(env.DatasetType.TRAINING)
-            val_data_size = dr.items_count(env.DatasetType.VALIDATION)
-            N = len(str(train_data_size + val_data_size))
-            splits = ['train', 'val']
-        else:
-            N = dr.items_count(env.DatasetType.CANDIDATE)
-            splits = ['test']
+    env_config = env.get_current_env()
+
+    if env_config.run_training:
+        train_data_size = dr.items_count(env.DatasetType.TRAINING)
+        val_data_size = dr.items_count(env.DatasetType.VALIDATION)
+        N = len(str(train_data_size + val_data_size))
+        splits = ['train', 'val']
+    elif env_config.run_mining:
+        N = dr.items_count(env.DatasetType.CANDIDATE)
+        splits = ['test']
+    elif env_config.run_infer:
+        N = dr.items_count(env.DatasetType.CANDIDATE)
+        splits = ['test']
 
     idx = 0
     DatasetTypeDict = dict(train=env.DatasetType.TRAINING,
@@ -250,9 +243,9 @@ def convert_ymir_to_yolov5(root_dir, args=None):
                 assert osp.exists(annotation_path), f'cannot find {annotation_path}'
 
                 img_suffix = osp.splitext(asset_path)[1]
-                img_path = osp.join(root_dir, 'images', str(idx).zfill(digit_num) + img_suffix)
+                img_path = osp.join(output_root_dir, 'images', str(idx).zfill(digit_num) + img_suffix)
                 shutil.copy(asset_path, img_path)
-                ann_path = osp.join(root_dir, 'labels', str(idx).zfill(digit_num) + '.txt')
+                ann_path = osp.join(output_root_dir, 'labels', str(idx).zfill(digit_num) + '.txt')
                 yolov5_ann_path = img2label_paths([img_path])[0]
                 assert yolov5_ann_path == ann_path, f'bad yolov5_ann_path={yolov5_ann_path} and ann_path = {ann_path}'
 
@@ -273,12 +266,12 @@ def convert_ymir_to_yolov5(root_dir, args=None):
 
                 split_imgs.append(img_path)
         if split in ['train', 'val']:
-            with open(osp.join(root_dir, f'{split}.txt'), 'w') as fw:
+            with open(osp.join(output_root_dir, f'{split}.txt'), 'w') as fw:
                 fw.write('\n'.join(split_imgs))
 
     # generate data.yaml for training/mining/infer
     config = env.get_executor_config()
-    data = dict(path=root_dir,
+    data = dict(path=output_root_dir,
                 train="train.txt",
                 val="val.txt",
                 test='test.txt',
