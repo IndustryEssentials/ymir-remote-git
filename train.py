@@ -56,7 +56,7 @@ from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
 from utils.ymir_yolov5 import write_ymir_training_result, PREPROCESS_PERCENT, TASK_PERCENT
-from ymir_exc import monitor
+from ymir_exc import monitor, env
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
@@ -431,10 +431,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
-                write_ymir_training_result(results,maps,rewrite=False)
+                write_ymir_training_result(results, maps, rewrite=False)
                 if best_fitness == fi:
                     torch.save(ckpt, best)
-                    write_ymir_training_result(results,maps,rewrite=True)
+                    write_ymir_training_result(results, maps, rewrite=True)
                 if (epoch > 0) and (opt.save_period > 0) and (epoch % opt.save_period == 0):
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
                 del ckpt
@@ -558,7 +558,7 @@ def main(opt, callbacks=Callbacks()):
         if opt.name == 'cfg':
             opt.name = Path(opt.cfg).stem  # use model.yaml as name
         opt.save_dir = str(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))
-        opt.log_dir = str(increment_path(Path(opt.project) / 'tensorboard', exist_ok=opt.exist_ok))
+        opt.log_dir = env.get_current_env().output.tensorboard_dir
 
 
     # DDP mode

@@ -3,3 +3,5 @@ batch_size: 16
 epochs: 300
 img_size: 640
 opset: 11
+conf_thres: 0.25
+iou_thres: 0.45

@@ -106,8 +106,10 @@ class YmirYolov5():
         self.device = device
         self.class_names = executor_config['class_names']
         self.stride = self.model.stride
+        self.conf_thres = float(executor_config['conf_thres'])
+        self.iou_thres = float(executor_config['iou_thres'])
 
-        img_size = executor_config['img_size']
+        img_size = int(executor_config['img_size'])
         imgsz = (img_size, img_size)
         imgsz = check_img_size(imgsz, s=self.stride)
         # Run inference
@@ -115,7 +117,7 @@ class YmirYolov5():
 
         self.img_size = imgsz
 
-    def init_detector(self, device):
+    def init_detector(self, device) -> DetectMultiBackend:
         weights = get_weight_file(try_download=True)
 
         model = DetectMultiBackend(weights=weights,
@@ -143,8 +145,8 @@ class YmirYolov5():
         pred = self.model(img1)
 
         # postprocess
-        conf_thres = 0.25
-        iou_thres = 0.45
+        conf_thres = self.conf_thres
+        iou_thres = self.iou_thres
         classes = None
         agnostic_nms = False
         max_det = 1000
@@ -237,7 +239,6 @@ def convert_ymir_to_yolov5(root_dir, args=None):
             idx += 1
             if idx % monitor_gap == 0:
                 monitor.write_monitor_logger(percent=PREPROCESS_PERCENT * idx / N)
-            asset_path = osp.join(path_env.input.root_dir, path_env.input.assets_dir, asset_path)
 
             assert osp.exists(asset_path), f'cannot find {asset_path}'
 
@@ -291,7 +292,7 @@ def convert_ymir_to_yolov5(root_dir, args=None):
 def write_ymir_training_result(results, maps, rewrite=False):
     """
     results: (mp, mr, map50, map, loss)
-    maps: map for all class
+    maps: map for all classes
     """
     if not rewrite:
         training_result_file = env.get_current_env().output.training_result_file
