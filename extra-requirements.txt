@@ -1,6 +1,7 @@
 easydict
 torch
 torchvision
+tensorboard
 PyYAML
 tqdm
 ymir-exc
