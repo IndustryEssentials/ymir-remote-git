@@ -43,6 +43,7 @@ class MiningCald(YmirYolov5):
             img = cv2.imread(asset_path)
             # xyxy,conf,cls
             result = self.predict(img)
+            bboxes, conf, _ = split_result(result)
             if len(result) == 0:
                 # no result for the image without augmentation
                 mining_result.append((asset_path, -beta))
@@ -50,7 +51,6 @@ class MiningCald(YmirYolov5):
 
             consistency = 0
             aug_bboxes_dict, aug_results_dict = self.aug_predict(img, bboxes)
-            bboxes, conf, _ = split_result(result)
             for key in aug_results_dict:
                 # no result for the image with augmentation f'{key}'
                 if len(aug_results_dict[key]) == 0:

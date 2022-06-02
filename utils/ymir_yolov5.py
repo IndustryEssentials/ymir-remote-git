@@ -4,13 +4,13 @@ function for combine ymir and yolov5
 import os
 import os.path as osp
 import shutil
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 
 import imagesize
 import numpy as np
 import torch
 import yaml
-from nptyping import Int, NDArray, Shape
+from nptyping import UInt8, NDArray, Shape
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
@@ -26,8 +26,9 @@ from utils.torch_utils import select_device
 PREPROCESS_PERCENT = 0.1
 TASK_PERCENT = 0.8
 
-CV_IMAGE=NDArray[Shape['*,*,3'], Int]
-BBOX=NDArray[Shape['*,4']]
+CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
+BBOX = NDArray[Shape['*,4'], Any]
+
 
 def get_code_config() -> dict:
     executor_config = env.get_executor_config()
@@ -51,7 +52,7 @@ def get_merged_config() -> dict:
     return code_cfg
 
 
-def get_weight_file(try_download:bool =True) -> str:
+def get_weight_file(try_download: bool = True) -> str:
     """
     return the weight file path by priority
 
@@ -87,13 +88,14 @@ def get_weight_file(try_download:bool =True) -> str:
         return weights
     else:
         # donot allow download weight for mining and infer
-        assert False,'no weight file offered!'
+        assert False, 'no weight file offered!'
 
 
 class YmirYolov5():
     """
     used for mining and inference to init detector and predict.
     """
+
     def __init__(self):
         executor_config = get_merged_config()
         gpu_id = executor_config.get('gpu_id', '0')
@@ -167,7 +169,7 @@ class YmirYolov5():
             tensor_result = torch.cat(result, dim=0)
             numpy_result = tensor_result.data.cpu().numpy()
         else:
-            numpy_result = np.zeros(shape=(0,6),dtype=np.float32)
+            numpy_result = np.zeros(shape=(0, 6), dtype=np.float32)
 
         return numpy_result
 
@@ -293,10 +295,10 @@ def write_ymir_training_result(results: Tuple, maps: NDArray, rewrite=False) -> 
     executor_config = get_merged_config()
     model = executor_config['model']
     class_names = executor_config['class_names']
-    mp = results[0] # mean of precision
-    mr = results[1] # mean of recall
-    map50 = results[2] # mean of ap@0.5
-    map = results[3] # mean of ap@0.5:0.95
+    mp = results[0]  # mean of precision
+    mr = results[1]  # mean of recall
+    map50 = results[2]  # mean of ap@0.5
+    map = results[3]  # mean of ap@0.5:0.95
 
     # use `rw.write_training_result` to save training result
     rw.write_training_result(model_names=[f'{model}.yaml', 'best.pt', 'last.pt', 'best.onnx'],

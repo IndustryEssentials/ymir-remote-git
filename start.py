@@ -65,14 +65,14 @@ def _run_training(env_config: env.EnvConfig) -> None:
         '--exist-ok'
     logging.info(f'start training: {command}')
 
-    subprocess.check_output(command.split())
+    subprocess.run(command.split(),check=True)
     monitor.write_monitor_logger(percent=PREPROCESS_PERCENT + TASK_PERCENT)
 
     # 4. convert to onnx and save model weight to design directory
     opset = executor_config['opset']
     command = f'python3 export.py --weights {models_dir}/best.pt --opset {opset} --include onnx'
     logging.info(f'export onnx weight: {command}')
-    subprocess.check_output(command.split())
+    subprocess.run(command.split(),check=True)
 
     # save hyperparameter
     shutil.copy(f'models/{model}.yaml', f'{models_dir}/{model}.yaml')
@@ -92,7 +92,7 @@ def _run_mining(env_config: env.EnvConfig) -> None:
 
     command = 'python3 mining/mining_cald.py'
     logging.info(f'mining: {command}')
-    subprocess.check_output(command.split())
+    subprocess.run(command.split(),check=True)
     monitor.write_monitor_logger(percent=1.0)
 
 
