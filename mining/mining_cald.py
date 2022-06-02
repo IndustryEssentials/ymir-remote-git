@@ -26,8 +26,8 @@ def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
         class_id = result[:, 5]
     else:
         bboxes = np.zeros(shape=(0, 4), dtype=np.int32)
-        conf = np.zeros(size=(0, 1), dtype=np.float32)
-        class_id = np.zeros(size=(0, 1), dtype=np.int32)
+        conf = np.zeros(shape=(0, 1), dtype=np.float32)
+        class_id = np.zeros(shape=(0, 1), dtype=np.int32)
 
     return bboxes, conf, class_id
 
@@ -49,7 +49,7 @@ class MiningCald(YmirYolov5):
                 mining_result.append((asset_path, -beta))
                 continue
 
-            consistency = 0
+            consistency = 0.0
             aug_bboxes_dict, aug_results_dict = self.aug_predict(img, bboxes)
             for key in aug_results_dict:
                 # no result for the image with augmentation f'{key}'
@@ -61,7 +61,7 @@ class MiningCald(YmirYolov5):
                 cls_scores_aug = 1 - conf_key
                 cls_scores = 1 - conf
 
-                consistency_per_aug = 2
+                consistency_per_aug = 2.0
                 ious = get_ious(bboxes_key, aug_bboxes_dict[key])
                 aug_idxs = np.argmax(ious, axis=0)
                 for origin_idx, aug_idx in enumerate(aug_idxs):
