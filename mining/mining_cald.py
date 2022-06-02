@@ -1,8 +1,14 @@
+"""
+Consistency-based Active Learning for Object Detection CVPR 2022 workshop
+official code: https://github.com/we1pingyu/CALD/blob/master/cald_train.py
+"""
 import os.path as osp
 import sys
+from typing import Dict, List, Tuple
 
 import cv2
 import numpy as np
+from nptyping import NDArray
 from scipy.stats import entropy
 from tqdm import tqdm
 from ymir_exc import dataset_reader as dr
@@ -10,59 +16,57 @@ from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
 from mining.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from utils.ymir_yolov5 import YmirYolov5, POSTPROCESS_PERCENT, TASK_PERCENT
+from utils.ymir_yolov5 import BBOX, CV_IMAGE, PREPROCESS_PERCENT, TASK_PERCENT, YmirYolov5
+
+
+def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
+    if len(result) > 0:
+        bboxes = result[:, :4].astype(np.int32)
+        conf = result[:, 4]
+        class_id = result[:, 5]
+    else:
+        bboxes = np.zeros(shape=(0, 4), dtype=np.int32)
+        conf = np.zeros(size=(0, 1), dtype=np.float32)
+        class_id = np.zeros(size=(0, 1), dtype=np.int32)
+
+    return bboxes, conf, class_id
 
 
 class MiningCald(YmirYolov5):
-    def mining(self):
-        def split_result(result):
-            if len(result) > 0:
-                bboxes = result[:, :4]
-                conf = result[:, 4]
-                class_id = result[:, 5]
-            else:
-                bboxes = []
-                conf = []
-                class_id = []
-
-            return bboxes, conf, class_id
-
-        path_env = env.get_current_env()
+    def mining(self) -> List:
         N = dr.items_count(env.DatasetType.CANDIDATE)
         monitor_gap = max(1, N // 100)
         idx = -1
         beta = 1.3
         mining_result = []
         for asset_path, _ in tqdm(dr.item_paths(dataset_type=env.DatasetType.CANDIDATE)):
-            img_path = osp.join(path_env.input.root_dir, path_env.input.assets_dir, asset_path)
-            img = cv2.imread(img_path)
+            img = cv2.imread(asset_path)
             # xyxy,conf,cls
             result = self.predict(img)
-            if len(result) > 0:
-                bboxes = result[:, :4]
-            else:
-                bboxes = []
+            if len(result) == 0:
+                # no result for the image without augmentation
                 mining_result.append((asset_path, -beta))
                 continue
 
             consistency = 0
             aug_bboxes_dict, aug_results_dict = self.aug_predict(img, bboxes)
-            bboxes, conf, class_id = split_result(result)
+            bboxes, conf, _ = split_result(result)
             for key in aug_results_dict:
+                # no result for the image with augmentation f'{key}'
                 if len(aug_results_dict[key]) == 0:
                     consistency += beta
                     continue
 
-                bboxes_key, conf_key, class_id_key = split_result(aug_results_dict[key])
+                bboxes_key, conf_key, _ = split_result(aug_results_dict[key])
                 cls_scores_aug = 1 - conf_key
                 cls_scores = 1 - conf
 
                 consistency_per_aug = 2
-                ious = _ious(bboxes_key, aug_bboxes_dict[key])
+                ious = get_ious(bboxes_key, aug_bboxes_dict[key])
                 aug_idxs = np.argmax(ious, axis=0)
                 for origin_idx, aug_idx in enumerate(aug_idxs):
-                    iou = ious[aug_idx, origin_idx]
-                    if iou == 0:
+                    max_iou = ious[aug_idx, origin_idx]
+                    if max_iou == 0:
                         consistency_per_aug = min(consistency_per_aug, beta)
                     p = cls_scores_aug[aug_idx]
                     q = cls_scores[origin_idx]
@@ -70,7 +74,7 @@ class MiningCald(YmirYolov5):
                     js = 0.5 * entropy(p, m) + 0.5 * entropy(q, m)
                     if js < 0:
                         js = 0
-                    consistency_box = iou
+                    consistency_box = max_iou
                     consistency_cls = 0.5 * (conf[origin_idx] + conf_key[aug_idx]) * (1 - js)
                     consistency_per_inst = abs(consistency_box + consistency_cls - beta)
                     consistency_per_aug = min(consistency_per_aug, consistency_per_inst.item())
@@ -83,12 +87,18 @@ class MiningCald(YmirYolov5):
             idx += 1
 
             if idx % monitor_gap == 0:
-                percent = POSTPROCESS_PERCENT + TASK_PERCENT * idx / N
+                percent = PREPROCESS_PERCENT + TASK_PERCENT * idx / N
                 monitor.write_monitor_logger(percent=percent)
 
         return mining_result
 
-    def aug_predict(self, image, bboxes):
+    def aug_predict(self, image: CV_IMAGE, bboxes: BBOX) -> Tuple[Dict[str, BBOX], Dict[str, NDArray]]:
+        """
+        for different augmentation methods: flip, cutout, rotate and resize
+            augment the image and bbox and use model to predict them.
+
+        return the predict result and augment bbox.
+        """
         aug_dict = dict(flip=horizontal_flip,
                         cutout=cutout,
                         rotate=rotate,
@@ -106,11 +116,11 @@ class MiningCald(YmirYolov5):
         return aug_bboxes, aug_results
 
 
-def _ious(boxes1, boxes2):
+def get_ious(boxes1: BBOX, boxes2: BBOX) -> NDArray:
     """
     args:
-        boxes1: np.array, (N, 4)
-        boxes2: np.array, (M, 4)
+        boxes1: np.array, (N, 4), xyxy
+        boxes2: np.array, (M, 4), xyxy
     return:
         iou: np.array, (N, M)
     """

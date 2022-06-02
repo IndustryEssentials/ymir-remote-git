@@ -22,4 +22,5 @@ pandas>=1.1.4
 seaborn>=0.11.0
 
 # Ymir  ---------------------------------------
-imagesize
+imagesize # fast obtain image size without load image
+nptyping # numpy type hint

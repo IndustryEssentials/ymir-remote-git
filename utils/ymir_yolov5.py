@@ -1,15 +1,16 @@
 """
-convert ymir dataset to yolov5 dataset
+function for combine ymir and yolov5
 """
 import os
 import os.path as osp
 import shutil
+from typing import List, Dict, Tuple
 
 import imagesize
 import numpy as np
 import torch
 import yaml
-from loguru import logger
+from nptyping import Int, NDArray, Shape
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
@@ -23,18 +24,17 @@ from utils.torch_utils import select_device
 
 # const value for process
 PREPROCESS_PERCENT = 0.1
-TASK_PERCENT = 0.9
-POSTPROCESS_PERCENT = 1.0
+TASK_PERCENT = 0.8
 
+CV_IMAGE=NDArray[Shape['*,*,3'], Int]
+BBOX=NDArray[Shape['*,4']]
 
 def get_code_config() -> dict:
     executor_config = env.get_executor_config()
-    code_config_file = executor_config.get('code_config', '')
+    code_config_file = executor_config.get('code_config', None)
 
-    if not code_config_file:
+    if code_config_file is None:
         return dict()
-    elif not os.path.exists(code_config_file):
-        assert False, f"cannot find code config {code_config_file}"
     else:
         with open(code_config_file, 'r') as f:
             return yaml.safe_load(f)
@@ -43,17 +43,15 @@ def get_code_config() -> dict:
 def get_merged_config() -> dict:
     """
     merge executor_config and code_config
+    code_config will be overwrited.
     """
-
-    # exe_cfg overwrite code_cfg
     exe_cfg = env.get_executor_config()
     code_cfg = get_code_config()
-
     code_cfg.update(exe_cfg)
     return code_cfg
 
 
-def get_weight_file(try_download=True) -> str:
+def get_weight_file(try_download:bool =True) -> str:
     """
     return the weight file path by priority
 
@@ -62,7 +60,7 @@ def get_weight_file(try_download=True) -> str:
             yolov5 will download it from github.
     """
     executor_config = get_merged_config()
-    path_config = env.get_current_env()
+    ymir_env = env.get_current_env()
 
     env_config = env.get_current_env()
     if env_config.run_training:
@@ -70,11 +68,11 @@ def get_weight_file(try_download=True) -> str:
     else:
         model_params_path = executor_config['model_params_path']
 
-    model_dir = osp.join(path_config.input.root_dir,
-                         path_config.input.models_dir)
+    model_dir = osp.join(ymir_env.input.root_dir,
+                         ymir_env.input.models_dir)
     model_params_path = [p for p in model_params_path if osp.exists(osp.join(model_dir, p))]
 
-    # choose weight file by priority, best.pt > xxx.pt > f'{model_name}.pt'
+    # choose weight file by priority, best.pt > xxx.pt
     if 'best.pt' in model_params_path:
         return osp.join(model_dir, 'best.pt')
     else:
@@ -83,15 +81,19 @@ def get_weight_file(try_download=True) -> str:
                 return osp.join(model_dir, f)
 
     # if no weight file offered
-    if try_download:
+    if env_config.run_training and try_download:
         model_name = get_merged_config()['model']
         weights = attempt_download(f'{model_name}.pt')
         return weights
     else:
-        return ''
+        # donot allow download weight for mining and infer
+        assert False,'no weight file offered!'
 
 
 class YmirYolov5():
+    """
+    used for mining and inference to init detector and predict.
+    """
     def __init__(self):
         executor_config = get_merged_config()
         gpu_id = executor_config.get('gpu_id', '0')
@@ -117,8 +119,8 @@ class YmirYolov5():
 
         self.img_size = imgsz
 
-    def init_detector(self, device) -> DetectMultiBackend:
-        weights = get_weight_file(try_download=True)
+    def init_detector(self, device: torch.device) -> DetectMultiBackend:
+        weights = get_weight_file(try_download=False)
 
         model = DetectMultiBackend(weights=weights,
                                    device=device,
@@ -127,22 +129,21 @@ class YmirYolov5():
 
         return model
 
-    def predict(self, img):
+    def predict(self, img: CV_IMAGE) -> NDArray:
         """
+        predict single image and return bbox information
         img: opencv BGR, uint8 format
         """
         # preprocess: padded resize
         img1 = letterbox(img, self.img_size, stride=self.stride, auto=True)[0]
 
-        # Convert
+        # preprocess: convert data format
         img1 = img1.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img1 = np.ascontiguousarray(img1)
         img1 = torch.from_numpy(img1).to(self.device)
 
         img1 = img1 / 255  # 0 - 255 to 0.0 - 1.0
-        if len(img1.shape) == 3:
-            img1 = img1[None]  # expand for batch dim
-
+        img1.unsqueeze_(dim=0)  # expand for batch dim
         pred = self.model(img1)
 
         # postprocess
@@ -163,23 +164,23 @@ class YmirYolov5():
 
         # xyxy, conf, cls
         if len(result) > 0:
-            result = torch.cat(result, dim=0)
-            result = result.data.cpu().numpy()
+            tensor_result = torch.cat(result, dim=0)
+            numpy_result = tensor_result.data.cpu().numpy()
+        else:
+            numpy_result = np.zeros(shape=(0,6),dtype=np.float32)
 
-        return result
+        return numpy_result
 
-    def infer(self, img):
+    def infer(self, img: CV_IMAGE) -> List[rw.Annotation]:
         anns = []
         result = self.predict(img)
-        if result == []:
-            anns = []
-        else:
-            for i in range(result.shape[0]):
-                xmin, ymin, xmax, ymax, conf, cls = result[i, :6].tolist()
-                ann = rw.Annotation(class_name=self.class_names[int(cls)], score=conf, box=rw.Box(
-                    x=int(xmin), y=int(ymin), w=int(xmax - xmin), h=int(ymax - ymin)))
 
-                anns.append(ann)
+        for i in range(result.shape[0]):
+            xmin, ymin, xmax, ymax, conf, cls = result[i, :6].tolist()
+            ann = rw.Annotation(class_name=self.class_names[int(cls)], score=conf, box=rw.Box(
+                x=int(xmin), y=int(ymin), w=int(xmax - xmin), h=int(ymax - ymin)))
+
+            anns.append(ann)
 
         return anns
 
@@ -195,7 +196,7 @@ def digit(x: int) -> int:
     return i
 
 
-def convert_ymir_to_yolov5(output_root_dir):
+def convert_ymir_to_yolov5(output_root_dir: str) -> None:
     """
     convert ymir format dataset to yolov5 format
     root_dir: the output dir
@@ -204,17 +205,17 @@ def convert_ymir_to_yolov5(output_root_dir):
     os.makedirs(osp.join(output_root_dir, 'images'), exist_ok=True)
     os.makedirs(osp.join(output_root_dir, 'labels'), exist_ok=True)
 
-    env_config = env.get_current_env()
+    ymir_env = env.get_current_env()
 
-    if env_config.run_training:
+    if ymir_env.run_training:
         train_data_size = dr.items_count(env.DatasetType.TRAINING)
         val_data_size = dr.items_count(env.DatasetType.VALIDATION)
         N = len(str(train_data_size + val_data_size))
         splits = ['train', 'val']
-    elif env_config.run_mining:
+    elif ymir_env.run_mining:
         N = dr.items_count(env.DatasetType.CANDIDATE)
         splits = ['test']
-    elif env_config.run_infer:
+    elif ymir_env.run_infer:
         N = dr.items_count(env.DatasetType.CANDIDATE)
         splits = ['test']
 
@@ -225,7 +226,6 @@ def convert_ymir_to_yolov5(output_root_dir):
 
     digit_num = digit(N)
     monitor_gap = max(1, N // 10)
-    path_env = env.get_current_env()
     for split in splits:
         split_imgs = []
         for asset_path, annotation_path in dr.item_paths(dataset_type=DatasetTypeDict[split]):
@@ -233,15 +233,10 @@ def convert_ymir_to_yolov5(output_root_dir):
             if idx % monitor_gap == 0:
                 monitor.write_monitor_logger(percent=PREPROCESS_PERCENT * idx / N)
 
-            assert osp.exists(asset_path), f'cannot find {asset_path}'
-
             # only copy image for training task
             # valid train.txt, val.txt and invalid test.txt for training task
             # invalid train.txt, val.txt and test.txt for infer and mining task
             if split in ['train', 'val']:
-                annotation_path = osp.join(path_env.input.root_dir, path_env.input.annotations_dir, annotation_path)
-                assert osp.exists(annotation_path), f'cannot find {annotation_path}'
-
                 img_suffix = osp.splitext(asset_path)[1]
                 img_path = osp.join(output_root_dir, 'images', str(idx).zfill(digit_num) + img_suffix)
                 shutil.copy(asset_path, img_path)
@@ -250,6 +245,8 @@ def convert_ymir_to_yolov5(output_root_dir):
                 assert yolov5_ann_path == ann_path, f'bad yolov5_ann_path={yolov5_ann_path} and ann_path = {ann_path}'
 
                 width, height = imagesize.get(img_path)
+
+                # convert annotation_path to ann_path
                 with open(ann_path, 'w') as fw:
                     with open(annotation_path, 'r') as fr:
                         for line in fr.readlines():
@@ -282,10 +279,11 @@ def convert_ymir_to_yolov5(output_root_dir):
         fw.write(yaml.safe_dump(data))
 
 
-def write_ymir_training_result(results, maps, rewrite=False):
+def write_ymir_training_result(results: Tuple, maps: NDArray, rewrite=False) -> int:
     """
     results: (mp, mr, map50, map, loss)
-    maps: map for all classes
+    maps: map@0.5:0.95 for all classes
+    rewrite: set true to ensure write the best result
     """
     if not rewrite:
         training_result_file = env.get_current_env().output.training_result_file
@@ -295,15 +293,17 @@ def write_ymir_training_result(results, maps, rewrite=False):
     executor_config = get_merged_config()
     model = executor_config['model']
     class_names = executor_config['class_names']
-    map50 = maps
+    mp = results[0] # mean of precision
+    mr = results[1] # mean of recall
+    map50 = results[2] # mean of ap@0.5
+    map = results[3] # mean of ap@0.5:0.95
 
     # use `rw.write_training_result` to save training result
     rw.write_training_result(model_names=[f'{model}.yaml', 'best.pt', 'last.pt', 'best.onnx'],
-                             mAP=float(np.mean(map50)),
+                             mAP=float(map),
+                             mAP50=float(map50),
+                             precision=float(mp),
+                             recall=float(mr),
                              classAPs={class_name: v
-                                       for class_name, v in zip(class_names, map50.tolist())})
+                                       for class_name, v in zip(class_names, maps.tolist())})
     return 0
-
-
-if __name__ == '__main__':
-    convert_ymir_to_yolov5('/out/yolov5_dataset')

@@ -1,14 +1,18 @@
 """
 data augmentations for CALD method, including horizontal_flip, rotate(5'), cutout
+official code: https://github.com/we1pingyu/CALD/blob/master/cald/cald_helper.py
 """
-
 import random
+from typing import Any, List, Tuple
 
 import cv2
 import numpy as np
+from nptyping import NDArray
+
+from utils.ymir_yolov5 import BBOX, CV_IMAGE
 
 
-def intersect(boxes1, boxes2):
+def intersect(boxes1: BBOX, boxes2: BBOX) -> NDArray:
     '''
         Find intersection of every box combination between two sets of box
         boxes1: bounding boxes 1, a tensor of dimensions (n1, 4)
@@ -28,18 +32,26 @@ def intersect(boxes1, boxes2):
     return inter[:, :, 0] * inter[:, :, 1]  # (n1, n2)
 
 
-def horizontal_flip(image, bbox):
+def horizontal_flip(image: CV_IMAGE, bbox: BBOX) \
+        -> Tuple[CV_IMAGE, BBOX]:
+    """
+    image: opencv image, [height,width,channels]
+    bbox: numpy.ndarray, [N,4] --> [x1,y1,x2,y2]
+    """
     image = image.copy()
 
-    height, width = image.shape[:2]
+    width = image.shape[1]
+    # Flip image horizontally
     image = image[:, ::-1, :]
     if len(bbox) > 0:
         bbox = bbox.copy()
+        # Flip bbox horizontally
         bbox[:, [0, 2]] = width - bbox[:, [2, 0]]
     return image, bbox
 
 
-def cutout(image, bbox, cut_num=2, fill_val=0, bbox_remove_thres=0.4, bbox_min_thres=0.1):
+def cutout(image: CV_IMAGE, bbox: BBOX, cut_num: int = 2, fill_val: int = 0,
+           bbox_remove_thres: float = 0.4, bbox_min_thres: float = 0.1) -> Tuple[CV_IMAGE, BBOX]:
     '''
         Cutout augmentation
         image: A PIL image
@@ -77,42 +89,15 @@ def cutout(image, bbox, cut_num=2, fill_val=0, bbox_remove_thres=0.4, bbox_min_t
         # If all boxes have Iou greater than bbox_remove_thres, try again
         if ratio.max() > bbox_remove_thres or ratio.max() < bbox_min_thres:
             continue
+
         image[int(top):int(bottom), int(left):int(right), :] = fill_val
         count += 1
         if count >= cut_num:
             break
-        # return image, bbox
-    # draw_PIL_image(image, boxes, labels)
     return image, bbox
 
 
-def my_get_affine_transform(point, rotate_matric):
-    new_point = np.matmul(np.array([[point[0], point[1], 1]]), rotate_matric.T)
-    return new_point[0]
-
-
-def my_rotate(image, bbox, rot=5):
-    image = image.copy()
-    bbox = bbox.copy()
-    h, w, c = image.shape
-    rotate_matirc = cv2.getRotationMatrix2D((w // 2, h // 2), rot, 1.0)
-    image = cv2.warpAffine(image, rotate_matirc, (w, h), flags=cv2.INTER_LINEAR)
-
-    if len(bbox) > 0:
-        for i in range(bbox.shape[0]):
-            x1, y1 = my_get_affine_transform([bbox[i][0], bbox[i][1]], rotate_matirc)
-            x2, y2 = my_get_affine_transform([bbox[i][0], bbox[i][3]], rotate_matirc)
-            x3, y3 = my_get_affine_transform([bbox[i][2], bbox[i][1]], rotate_matirc)
-            x4, y4 = my_get_affine_transform([bbox[i][2], bbox[i][3]], rotate_matirc)
-            xmin = min(x1, x2, x3, x4)
-            xmax = max(x1, x2, x3, x4)
-            ymin = min(y1, y2, y3, y4)
-            ymax = max(y1, y2, y3, y4)
-            bbox[i] = [xmin, ymin, xmax, ymax]
-    return image, bbox
-
-
-def rotate(image, bbox, rot=5):
+def rotate(image: CV_IMAGE, bbox: BBOX, rot: float = 5) -> Tuple[CV_IMAGE, BBOX]:
     image = image.copy()
     bbox = bbox.copy()
     h, w, c = image.shape
@@ -131,12 +116,12 @@ def rotate(image, bbox, rot=5):
     return image, bbox
 
 
-def get_3rd_point(a, b):
+def get_3rd_point(a: NDArray, b: NDArray) -> NDArray:
     direct = a - b
     return b + np.array([-direct[1], direct[0]], dtype=np.float32)
 
 
-def get_dir(src_point, rot_rad):
+def get_dir(src_point: NDArray, rot_rad: float) -> List:
     sn, cs = np.sin(rot_rad), np.cos(rot_rad)
 
     src_result = [0, 0]
@@ -146,18 +131,18 @@ def get_dir(src_point, rot_rad):
     return src_result
 
 
-def transform_preds(coords, center, scale, rot, output_size):
-    trans = get_affine_transform(center, scale, rot, output_size, inv=1)
+def transform_preds(coords: NDArray, center: NDArray, scale: Any, rot: float, output_size: List) -> NDArray:
+    trans = get_affine_transform(center, scale, rot, output_size, inv=True)
     target_coords = affine_transform(coords, trans)
     return target_coords
 
 
-def get_affine_transform(center,
-                         scale,
-                         rot,
-                         output_size,
-                         shift=np.array([0, 0], dtype=np.float32),
-                         inv=0):
+def get_affine_transform(center: NDArray,
+                         scale: Any,
+                         rot: float,
+                         output_size: List,
+                         shift: NDArray = np.array([0, 0], dtype=np.float32),
+                         inv: bool = False) -> NDArray:
     if not isinstance(scale, np.ndarray) and not isinstance(scale, list):
         scale = np.array([scale, scale], dtype=np.float32)
 
@@ -188,59 +173,26 @@ def get_affine_transform(center,
     return trans
 
 
-def affine_transform(pt, t):
+def affine_transform(pt: NDArray, t: NDArray) -> NDArray:
     new_pt = np.array([pt[0], pt[1], 1.], dtype=np.float32).T
     new_pt = np.dot(t, new_pt)
     return new_pt[:2]
 
 
-def resize(img, boxes, ratio=0.8):
+def resize(img: CV_IMAGE, boxes: BBOX, ratio: float = 0.8) -> Tuple[CV_IMAGE, BBOX]:
+    """
+    ratio: <= 1.0
+    """
+    assert ratio <= 1.0, f'resize ratio {ratio} must <= 1.0'
+
     h, w, _ = img.shape
     ow = int(w * ratio)
     oh = int(h * ratio)
     resize_img = cv2.resize(img, (ow, oh))
-    new_img = img * 0
+    new_img = np.zeros_like(img)
     new_img[:oh, :ow] = resize_img
 
     if len(boxes) == 0:
         return new_img, boxes
     else:
         return new_img, boxes * ratio
-
-
-if __name__ == '__main__':
-    a = np.array([[0., 0., 2., 2.], [0, 0, 2, 2]])
-    b = np.array([[0., 0., 3., 1.], [0, 0, 3, 1]])
-    area_boxes = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
-    inter = intersect(a, b)
-    print(inter)
-    ratio = inter / area_boxes
-    print(ratio.max())
-    color = (0, 0, 255)
-
-    img_path = "/home/fengchengjian/files/data/loess_labeled/result_imgs_0211to0411-exposed_loess_al3_maxscore-0619_zyl/44030751011320120293_20210408-144656.jpg"
-    image = cv2.imread(img_path)
-    bbox = np.array([[1139, 629, 1574, 797]])
-    rot_image, rot_bbox = rotate(image, bbox)
-    flip_image, flip_bbox = horizontal_flip(image, bbox)
-    cutout_image, cutout_bbox = cutout(image, bbox)
-    resize_image, resize_bbox = resize(image, bbox)
-    my_rot_image, my_rot_bbox = my_rotate(image, bbox)
-    for box, rot_box, flip_box, cut_box, res_bbox, my_rot_box in zip(bbox, rot_bbox, flip_bbox, cutout_bbox, resize_bbox, my_rot_bbox):
-        image = cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), color, 2)
-        flip_image = cv2.rectangle(flip_image, (int(flip_box[0]), int(
-            flip_box[1])), (int(flip_box[2]), int(flip_box[3])), color, 2)
-        rot_image = cv2.rectangle(rot_image, (int(rot_box[0]), int(
-            rot_box[1])), (int(rot_box[2]), int(rot_box[3])), color, 2)
-        cutout_image = cv2.rectangle(cutout_image, (int(cut_box[0]), int(
-            cut_box[1])), (int(cut_box[2]), int(cut_box[3])), color, 2)
-        resize_image = cv2.rectangle(resize_image, (int(res_bbox[0]), int(
-            res_bbox[1])), (int(res_bbox[2]), int(res_bbox[3])), color, 2)
-        my_rot_image = cv2.rectangle(my_rot_image, (int(my_rot_box[0]), int(my_rot_box[1])), (int(my_rot_box[2]), int(my_rot_box[3])),
-                                     color, 2)
-    cv2.imwrite("result/origin.jpg", image)
-    cv2.imwrite("result/rot.jpg", rot_image)
-    cv2.imwrite("result/cutout.jpg", cutout_image)
-    cv2.imwrite("result/flip.jpg", flip_image)
-    cv2.imwrite("result/resize.jpg", resize_image)
-    cv2.imwrite("result/my_rot.jpg", my_rot_image)
