@@ -229,7 +229,7 @@ def _dummy_work(config: edict) -> None:
 
     for e in tqdm(range(config.epoch)):
         if env_config.run_training:
-            tb_log.add_scalar("fake_loss", 10/e, e)
+            tb_log.add_scalar("fake_loss", 10/(1+e), e)
         time.sleep(1)
         monitor.write_monitor_logger(percent=e/config.epoch)
 
