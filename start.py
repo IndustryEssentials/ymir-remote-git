@@ -240,5 +240,6 @@ if __name__ == '__main__':
                         datefmt='%Y%m%d-%H:%M:%S',
                         level=logging.INFO)
 
+    # view https://github.com/protocolbuffers/protobuf/issues/10051 for detail
     os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
     sys.exit(start())
