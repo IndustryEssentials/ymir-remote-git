@@ -10,8 +10,7 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from utils.ymir_yolov5 import (PREPROCESS_PERCENT, TASK_PERCENT, YmirYolov5,
-                               convert_ymir_to_yolov5, get_merged_config, get_weight_file)
+from utils.ymir_yolov5 import YmirYolov5, convert_ymir_to_yolov5, get_merged_config, get_weight_file, get_ymir_process
 
 
 def start() -> int:
@@ -46,9 +45,9 @@ def _run_training(env_config: env.EnvConfig) -> None:
 
     # 2. convert dataset
     logging.info('convert ymir dataset to yolov5 dataset')
-    out_dir = osp.join(env_config.output.root_dir, 'yolov5_dataset')
+    out_dir = env_config.output.root_dir
     convert_ymir_to_yolov5(out_dir)
-    monitor.write_monitor_logger(percent=PREPROCESS_PERCENT)
+    monitor.write_monitor_logger(percent=get_ymir_process(stage='preprocess', p=1.0))
 
     # 3. training model
     epochs = executor_config['epochs']
@@ -59,14 +58,14 @@ def _run_training(env_config: env.EnvConfig) -> None:
 
     models_dir = env_config.output.models_dir
     command = f'python3 train.py --epochs {epochs} ' + \
-        f'--batch-size {batch_size} --data data.yaml --project /out ' + \
+        f'--batch-size {batch_size} --data {out_dir}/data.yaml --project /out ' + \
         f'--cfg models/{model}.yaml --name models --weights {weights} ' + \
         f'--img-size {img_size} --hyp data/hyps/hyp.scratch-low.yaml ' + \
-        '--exist-ok'
+        '--label-format ymir --exist-ok'
     logging.info(f'start training: {command}')
 
     subprocess.run(command.split(), check=True)
-    monitor.write_monitor_logger(percent=PREPROCESS_PERCENT + TASK_PERCENT)
+    monitor.write_monitor_logger(percent=get_ymir_process(stage='task', p=1.0))
 
     # 4. convert to onnx and save model weight to design directory
     opset = executor_config['opset']
@@ -88,7 +87,7 @@ def _run_mining(env_config: env.EnvConfig) -> None:
     logging.info('convert ymir dataset to yolov5 dataset')
     out_dir = osp.join(env_config.output.root_dir, 'yolov5_dataset')
     convert_ymir_to_yolov5(out_dir)
-    monitor.write_monitor_logger(percent=PREPROCESS_PERCENT)
+    monitor.write_monitor_logger(percent=get_ymir_process(stage='preprocess', p=1.0))
 
     command = 'python3 mining/mining_cald.py'
     logging.info(f'mining: {command}')
@@ -104,7 +103,7 @@ def _run_infer(env_config: env.EnvConfig) -> None:
     logging.info('convert ymir dataset to yolov5 dataset')
     out_dir = osp.join(env_config.output.root_dir, 'yolov5_dataset')
     convert_ymir_to_yolov5(out_dir)
-    monitor.write_monitor_logger(percent=PREPROCESS_PERCENT)
+    monitor.write_monitor_logger(percent=get_ymir_process(stage='preprocess', p=1.0))
 
     N = dr.items_count(env.DatasetType.CANDIDATE)
     infer_result = dict()
@@ -119,7 +118,7 @@ def _run_infer(env_config: env.EnvConfig) -> None:
         idx += 1
 
         if idx % monitor_gap == 0:
-            percent = PREPROCESS_PERCENT + TASK_PERCENT * idx / N
+            percent = get_ymir_process(stage='task', p=idx / N)
             monitor.write_monitor_logger(percent=percent)
 
     rw.write_infer_result(infer_result=infer_result)

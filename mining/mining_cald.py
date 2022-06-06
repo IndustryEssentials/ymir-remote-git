@@ -2,7 +2,6 @@
 Consistency-based Active Learning for Object Detection CVPR 2022 workshop
 official code: https://github.com/we1pingyu/CALD/blob/master/cald_train.py
 """
-import os.path as osp
 import sys
 from typing import Dict, List, Tuple
 
@@ -16,7 +15,7 @@ from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
 from mining.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from utils.ymir_yolov5 import BBOX, CV_IMAGE, PREPROCESS_PERCENT, TASK_PERCENT, YmirYolov5
+from utils.ymir_yolov5 import BBOX, CV_IMAGE, YmirYolov5, get_ymir_process
 
 
 def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
@@ -87,7 +86,7 @@ class MiningCald(YmirYolov5):
             idx += 1
 
             if idx % monitor_gap == 0:
-                percent = PREPROCESS_PERCENT + TASK_PERCENT * idx / N
+                percent = get_ymir_process(stage='task', p=idx / N)
                 monitor.write_monitor_logger(percent=percent)
 
         return mining_result

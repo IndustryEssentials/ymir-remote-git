@@ -1,39 +1,43 @@
 """
 function for combine ymir and yolov5
 """
-import os
 import os.path as osp
-import shutil
-from typing import List, Dict, Tuple, Any
+from typing import Any, List, Tuple
 
-import imagesize
 import numpy as np
 import torch
 import yaml
-from nptyping import UInt8, NDArray, Shape
-from ymir_exc import dataset_reader as dr
-from ymir_exc import env, monitor
+from nptyping import NDArray, Shape, UInt8
+from ymir_exc import env
 from ymir_exc import result_writer as rw
 
 from models.common import DetectMultiBackend
 from models.experimental import attempt_download
 from utils.augmentations import letterbox
-from utils.dataloaders import img2label_paths
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 
-# const value for process
-PREPROCESS_PERCENT = 0.1
-TASK_PERCENT = 0.8
-
-CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
 BBOX = NDArray[Shape['*,4'], Any]
+CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
 
 
-def get_code_config() -> dict:
-    executor_config = env.get_executor_config()
-    code_config_file = executor_config.get('code_config', None)
+def get_ymir_process(stage: str, p: float) -> float:
+    # const value for ymir process
+    PREPROCESS_PERCENT = 0.1
+    TASK_PERCENT = 0.8
+    POSTPROCESS_PERCENT = 0.1
 
+    if stage == 'preprocess':
+        return PREPROCESS_PERCENT * p
+    elif stage == 'task':
+        return PREPROCESS_PERCENT + TASK_PERCENT * p
+    elif stage == 'postprocess':
+        return PREPROCESS_PERCENT + TASK_PERCENT + POSTPROCESS_PERCENT * p
+    else:
+        raise NotImplementedError(f'unknown stage {stage}')
+
+
+def get_code_config(code_config_file: str) -> dict:
     if code_config_file is None:
         return dict()
     else:
@@ -47,7 +51,8 @@ def get_merged_config() -> dict:
     code_config will be overwrited.
     """
     exe_cfg = env.get_executor_config()
-    code_cfg = get_code_config()
+    code_config_file = exe_cfg.get('code_config', None)
+    code_cfg = get_code_config(code_config_file)
     code_cfg.update(exe_cfg)
     return code_cfg
 
@@ -63,8 +68,7 @@ def get_weight_file(try_download: bool = True) -> str:
     executor_config = get_merged_config()
     ymir_env = env.get_current_env()
 
-    env_config = env.get_current_env()
-    if env_config.run_training:
+    if ymir_env.run_training:
         model_params_path = executor_config['pretrained_model_paths']
     else:
         model_params_path = executor_config['model_params_path']
@@ -82,20 +86,22 @@ def get_weight_file(try_download: bool = True) -> str:
                 return osp.join(model_dir, f)
 
     # if no weight file offered
-    if try_download and env_config.run_training:
-        model_name = executor_config['model']
-        weights = attempt_download(f'{model_name}.pt')
-        return weights
-    elif try_download and not env_config.run_training:
-        # donot allow download weight for mining and infer
-        raise Exception('try_download is allowed for training task only ' +
-                        'please offer model weight in executor_config')
-    elif env_config.run_training:
-        # no pretrained weight
-        return ""
+    if try_download:
+        if ymir_env.run_training:
+            model_name = executor_config['model']
+            weights = attempt_download(f'{model_name}.pt')
+            return weights
+        else:
+            # donot allow download weight for mining and infer
+            raise Exception('try_download is allowed for training task only ' +
+                            'please offer model weight in executor_config')
     else:
-        raise Exception(f'no weight file offered in {model_dir} ' +
-                        'please offer model weight in executor_config')
+        if ymir_env.run_training:
+            # no pretrained weight, training from scratch
+            return ""
+        else:
+            raise Exception(f'no weight file offered in {model_dir} ' +
+                            'please offer model weight in executor_config')
 
 
 class YmirYolov5():
@@ -105,7 +111,7 @@ class YmirYolov5():
 
     def __init__(self):
         executor_config = get_merged_config()
-        gpu_id = executor_config.get('gpu_id', '0')
+        gpu_id = executor_config.get('gpu_id', '')
         gpu_num = len(gpu_id.split(','))
         if gpu_num == 0:
             device = 'cpu'
@@ -123,9 +129,8 @@ class YmirYolov5():
         img_size = int(executor_config['img_size'])
         imgsz = (img_size, img_size)
         imgsz = check_img_size(imgsz, s=self.stride)
-        # Run inference
-        self.model.warmup(imgsz=(1, 3, *imgsz))  # warmup
 
+        self.model.warmup(imgsz=(1, 3, *imgsz))  # warmup
         self.img_size = imgsz
 
     def init_detector(self, device: torch.device) -> DetectMultiBackend:
@@ -194,97 +199,23 @@ class YmirYolov5():
         return anns
 
 
-def digit(x: int) -> int:
-    """
-    get the filename length
-    x: the number of images
-    return the numerical digit
-    """
-    return len(str(x))
-
-
 def convert_ymir_to_yolov5(output_root_dir: str) -> None:
     """
     convert ymir format dataset to yolov5 format
     output_root_dir: the output root dir
     """
-    os.makedirs(output_root_dir, exist_ok=True)
-    os.makedirs(osp.join(output_root_dir, 'images'), exist_ok=True)
-    os.makedirs(osp.join(output_root_dir, 'labels'), exist_ok=True)
-
     ymir_env = env.get_current_env()
-
-    if ymir_env.run_training:
-        train_data_size = dr.items_count(env.DatasetType.TRAINING)
-        val_data_size = dr.items_count(env.DatasetType.VALIDATION)
-        N = len(str(train_data_size + val_data_size))
-        splits = ['train', 'val']
-    elif ymir_env.run_mining:
-        N = dr.items_count(env.DatasetType.CANDIDATE)
-        splits = ['test']
-    elif ymir_env.run_infer:
-        N = dr.items_count(env.DatasetType.CANDIDATE)
-        splits = ['test']
-
-    idx = 0
-    DatasetTypeDict = dict(train=env.DatasetType.TRAINING,
-                           val=env.DatasetType.VALIDATION,
-                           test=env.DatasetType.CANDIDATE)
-
-    digit_num = digit(N)
-    monitor_gap = max(1, N // 10)
-    for split in splits:
-        split_imgs = []
-        for asset_path, annotation_path in dr.item_paths(dataset_type=DatasetTypeDict[split]):
-            idx += 1
-            if idx % monitor_gap == 0:
-                monitor.write_monitor_logger(percent=PREPROCESS_PERCENT * idx / N)
-
-            # only copy image for training task
-            # valid train.txt, val.txt and invalid test.txt for training task
-            # invalid train.txt, val.txt and test.txt for infer and mining task
-            if split in ['train', 'val']:
-                img_suffix = osp.splitext(asset_path)[1]
-                img_path = osp.join(output_root_dir, 'images', str(idx).zfill(digit_num) + img_suffix)
-                shutil.copy(asset_path, img_path)
-                ann_path = osp.join(output_root_dir, 'labels', str(idx).zfill(digit_num) + '.txt')
-                yolov5_ann_path = img2label_paths([img_path])[0]
-
-                if yolov5_ann_path != ann_path:
-                    raise Exception(f'bad yolov5_ann_path={yolov5_ann_path} and ann_path = {ann_path}')
-
-                width, height = imagesize.get(img_path)
-
-                # convert annotation_path to ann_path
-                with open(ann_path, 'w') as fw:
-                    with open(annotation_path, 'r') as fr:
-                        for line in fr.readlines():
-                            class_id, xmin, ymin, xmax, ymax = [int(x) for x in line.strip().split(',')]
-
-                            # class x_center y_center width height
-                            # normalized xywh
-                            # class_id 0-indexed
-                            xc = (xmin + xmax) / 2 / width
-                            yc = (ymin + ymax) / 2 / height
-                            w = (xmax - xmin) / width
-                            h = (ymax - ymin) / height
-                            fw.write(f'{class_id} {xc} {yc} {w} {h}\n')
-
-                split_imgs.append(img_path)
-        if split in ['train', 'val']:
-            with open(osp.join(output_root_dir, f'{split}.txt'), 'w') as fw:
-                fw.write('\n'.join(split_imgs))
 
     # generate data.yaml for training/mining/infer
     config = env.get_executor_config()
-    data = dict(path=output_root_dir,
-                train="train.txt",
-                val="val.txt",
-                test='test.txt',
+    data = dict(path=ymir_env.input.root_dir,
+                train=ymir_env.input.training_index_file,
+                val=ymir_env.input.val_index_file,
+                test=ymir_env.input.candidate_index_file,
                 nc=len(config['class_names']),
                 names=config['class_names'])
 
-    with open('data.yaml', 'w') as fw:
+    with open(osp.join(output_root_dir, 'data.yaml'), 'w') as fw:
         fw.write(yaml.safe_dump(data))
 
 

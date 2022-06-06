@@ -55,7 +55,7 @@ from utils.loss import ComputeLoss
 from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
-from utils.ymir_yolov5 import write_ymir_training_result, PREPROCESS_PERCENT, TASK_PERCENT
+from utils.ymir_yolov5 import write_ymir_training_result, get_ymir_process
 from ymir_exc import monitor, env
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
@@ -67,7 +67,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
-    log_dir = Path(opt.log_dir)
+    log_dir, label_format = Path(opt.log_dir), opt.label_format
     callbacks.run('on_pretrain_routine_start')
 
     # Directories
@@ -235,6 +235,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                               image_weights=opt.image_weights,
                                               quad=opt.quad,
                                               prefix=colorstr('train: '),
+                                              label_format=label_format,
                                               shuffle=True)
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
@@ -253,7 +254,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                        rank=-1,
                                        workers=workers * 2,
                                        pad=0.5,
-                                       prefix=colorstr('val: '))[0]
+                                       prefix=colorstr('val: '),
+                                       label_format=label_format)[0]
 
         if not resume:
             labels = np.concatenate(dataset.labels, 0)
@@ -312,7 +314,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         # ymir monitor
         if epoch % monitor_gap == 0:
-            percent = PREPROCESS_PERCENT + TASK_PERCENT * epoch / (epochs - start_epoch + 1)
+            percent = get_ymir_process(stage='task', p=epoch/(epochs-start_epoch+1))
             monitor.write_monitor_logger(percent=percent)
 
         # Update image weights (optional, single-GPU only)
@@ -491,6 +493,7 @@ def parse_opt(known=False):
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
+    parser.add_argument('--label-format', type=str, choices=['ymir','yolov5'], default='yolov5', help='the annotation format')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
