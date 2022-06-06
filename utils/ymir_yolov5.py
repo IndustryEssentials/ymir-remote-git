@@ -196,13 +196,11 @@ class YmirYolov5():
 
 def digit(x: int) -> int:
     """
-    求整数10进制的位数
+    get the filename length
+    x: the number of images
+    return the numerical digit
     """
-    i = 1
-    while x >= 10:
-        x = x // 10
-        i = i + 1
-    return i
+    return len(str(x))
 
 
 def convert_ymir_to_yolov5(output_root_dir: str) -> None:
