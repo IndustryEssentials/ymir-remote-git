@@ -9,11 +9,14 @@ import torch
 import torchvision
 import yaml
 from easydict import EasyDict as edict
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
+
+# view https://github.com/protocolbuffers/protobuf/issues/10051 for detail
+os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
+from torch.utils.tensorboard import SummaryWriter
 
 
 def get_code_config() -> dict:
@@ -240,6 +243,4 @@ if __name__ == '__main__':
                         datefmt='%Y%m%d-%H:%M:%S',
                         level=logging.INFO)
 
-    # view https://github.com/protocolbuffers/protobuf/issues/10051 for detail
-    os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
     sys.exit(start())
