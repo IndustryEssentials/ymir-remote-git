@@ -19,7 +19,7 @@ from utils.torch_utils import select_device
 
 BBOX = NDArray[Shape['*,4'], Any]
 CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
-
+merged_config=None
 
 def get_ymir_process(stage: str, p: float) -> float:
     # const value for ymir process
@@ -44,18 +44,20 @@ def get_code_config(code_config_file: str) -> dict:
         with open(code_config_file, 'r') as f:
             return yaml.safe_load(f)
 
-
 def get_merged_config() -> dict:
     """
     merge executor_config and code_config
     code_config will be overwrited.
     """
-    exe_cfg = env.get_executor_config()
-    code_config_file = exe_cfg.get('code_config', None)
-    code_cfg = get_code_config(code_config_file)
-    code_cfg.update(exe_cfg)
-    return code_cfg
-
+    if merged_config is None:
+        exe_cfg = env.get_executor_config()
+        code_config_file = exe_cfg.get('code_config', None)
+        code_cfg = get_code_config(code_config_file)
+        code_cfg.update(exe_cfg)
+        merged_config = code_cfg
+        return code_cfg
+    else:
+        return merged_config
 
 def get_weight_file(try_download: bool = True) -> str:
     """
@@ -207,13 +209,13 @@ def convert_ymir_to_yolov5(output_root_dir: str) -> None:
     ymir_env = env.get_current_env()
 
     # generate data.yaml for training/mining/infer
-    config = env.get_executor_config()
+    executor_config = env.get_executor_config()
     data = dict(path=ymir_env.input.root_dir,
                 train=ymir_env.input.training_index_file,
                 val=ymir_env.input.val_index_file,
                 test=ymir_env.input.candidate_index_file,
-                nc=len(config['class_names']),
-                names=config['class_names'])
+                nc=len(executor_config['class_names']),
+                names=executor_config['class_names'])
 
     with open(osp.join(output_root_dir, 'data.yaml'), 'w') as fw:
         fw.write(yaml.safe_dump(data))
