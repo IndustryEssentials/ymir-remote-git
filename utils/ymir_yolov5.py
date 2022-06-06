@@ -56,9 +56,9 @@ def get_weight_file(try_download: bool = True) -> str:
     """
     return the weight file path by priority
 
-    1. executor_config['model_params_path']
+    1. executor_config['model_params_path'] or executor_config['model_params_path']
     2. if try_download and no weight file offered
-            yolov5 will download it from github.
+            for training task, yolov5 will download it from github.
     """
     executor_config = get_merged_config()
     ymir_env = env.get_current_env()
@@ -82,13 +82,17 @@ def get_weight_file(try_download: bool = True) -> str:
                 return osp.join(model_dir, f)
 
     # if no weight file offered
-    if env_config.run_training and try_download:
+    if try_download and env_config.run_training:
         model_name = get_merged_config()['model']
         weights = attempt_download(f'{model_name}.pt')
         return weights
-    else:
+    elif try_download and not env_config.run_training:
         # donot allow download weight for mining and infer
-        assert False, 'no weight file offered!'
+        raise Exception('try_download is allowed for training task only ' +
+                        'please offer model weight in executor_config')
+    else:
+        raise Exception(f'no weight file offered in {model_dir} ' +
+                        'please offer model weight in executor_config')
 
 
 class YmirYolov5():
@@ -244,7 +248,9 @@ def convert_ymir_to_yolov5(output_root_dir: str) -> None:
                 shutil.copy(asset_path, img_path)
                 ann_path = osp.join(output_root_dir, 'labels', str(idx).zfill(digit_num) + '.txt')
                 yolov5_ann_path = img2label_paths([img_path])[0]
-                assert yolov5_ann_path == ann_path, f'bad yolov5_ann_path={yolov5_ann_path} and ann_path = {ann_path}'
+
+                if yolov5_ann_path != ann_path:
+                    raise Exception(f'bad yolov5_ann_path={yolov5_ann_path} and ann_path = {ann_path}')
 
                 width, height = imagesize.get(img_path)
 
