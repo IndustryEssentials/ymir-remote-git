@@ -83,13 +83,16 @@ def get_weight_file(try_download: bool = True) -> str:
 
     # if no weight file offered
     if try_download and env_config.run_training:
-        model_name = get_merged_config()['model']
+        model_name = executor_config['model']
         weights = attempt_download(f'{model_name}.pt')
         return weights
     elif try_download and not env_config.run_training:
         # donot allow download weight for mining and infer
         raise Exception('try_download is allowed for training task only ' +
                         'please offer model weight in executor_config')
+    elif env_config.run_training:
+        # no pretrained weight
+        return ""
     else:
         raise Exception(f'no weight file offered in {model_dir} ' +
                         'please offer model weight in executor_config')
@@ -155,7 +158,7 @@ class YmirYolov5():
         # postprocess
         conf_thres = self.conf_thres
         iou_thres = self.iou_thres
-        classes = None
+        classes = None  # not filter class_idx in results
         agnostic_nms = False
         max_det = 1000
 
@@ -205,7 +208,7 @@ def digit(x: int) -> int:
 def convert_ymir_to_yolov5(output_root_dir: str) -> None:
     """
     convert ymir format dataset to yolov5 format
-    root_dir: the output dir
+    output_root_dir: the output root dir
     """
     os.makedirs(output_root_dir, exist_ok=True)
     os.makedirs(osp.join(output_root_dir, 'images'), exist_ok=True)
