@@ -9,6 +9,7 @@ import torch
 import torchvision
 import yaml
 from easydict import EasyDict as edict
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
@@ -16,58 +17,52 @@ from ymir_exc import result_writer as rw
 
 # view https://github.com/protocolbuffers/protobuf/issues/10051 for detail
 os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
-from torch.utils.tensorboard import SummaryWriter
 
 
-def get_code_config() -> dict:
-    executor_config = env.get_executor_config()
-    code_config_file = executor_config.get('code_config', None)
-
-    try:
-        remote_config = dict(git_url=executor_config['git_url'],
-                             git_branch=executor_config.get(
-                                 'git_branch', 'master'),
-                             code_config=code_config_file)
-
-        # if code_config_file == '' or code_config_file is None:
-        if not code_config_file:
+def get_merged_config() -> edict:
+    """
+    merge ymir_config, cfg.param and code_config
+    code_config will be overwrited by cfg.param.
+    """
+    def get_code_config(code_config_file: str) -> dict:
+        if code_config_file is None:
             return dict()
         else:
             with open(code_config_file, 'r') as f:
                 return yaml.safe_load(f)
-    except Exception as e:
-        logging.error(f'remote config {remote_config} with error: {e}')
-        raise
 
-
-def get_merged_config() -> dict:
-    """
-    merge executor_config and code_config
-    """
-
-    # exe_cfg overwrite code_cfg
     exe_cfg = env.get_executor_config()
-    code_cfg = get_code_config()
+    code_config_file = exe_cfg.get('code_config', None)
+    code_cfg = get_code_config(code_config_file)
     code_cfg.update(exe_cfg)
-    return code_cfg
+
+    merged_cfg = edict()
+    # the hyperparameter information
+    merged_cfg.param = code_cfg
+
+    # the ymir path information
+    merged_cfg.ymir = env.get_current_env()
+    return merged_cfg
 
 
 def start() -> int:
-    env_config = env.get_current_env()
+    cfg = get_merged_config()
 
-    if env_config.run_training:
-        _run_training(env_config)
-    elif env_config.run_mining:
-        _run_mining(env_config)
-    elif env_config.run_infer:
-        _run_infer(env_config)
+    logging.info(f'merged config: {cfg}')
+
+    if cfg.ymir.run_training:
+        _run_training(cfg)
+    elif cfg.ymir.run_mining:
+        _run_mining(cfg)
+    elif cfg.ymir.run_infer:
+        _run_infer(cfg)
     else:
-        logging.info('no task to run!!!')
+        logging.warning('no task running')
 
     return 0
 
 
-def _run_training(env_config: env.EnvConfig) -> None:
+def _run_training(cfg: edict) -> None:
     """
     sample function of training, which shows:
     1. how to get config
@@ -76,17 +71,14 @@ def _run_training(env_config: env.EnvConfig) -> None:
     4. how to write training result
     """
     # use `env.get_merged_config` to get config file for training
-    executor_config = get_merged_config()
-    class_names: List[str] = executor_config['class_names']
-    expected_mAP: float = executor_config.get('map', 0.6)
-    epoch: int = executor_config.get('epoch', 10)
-    model: str = executor_config.get('model', 'vgg11')
-
-    config = edict(epoch=epoch)
+    class_names: List[str] = cfg.param['class_names']
+    expected_mAP: float = cfg.param.get('map', 0.6)
+    epoch: int = cfg.param.get('epoch', 10)
+    model: str = cfg.param.get('model', 'vgg11')
 
     # use `logging` or `print` to write log to console
     #   notice that logging.basicConfig is invoked at executor.env
-    logging.info(f"training config: {executor_config}")
+    logging.info(f"training config: {cfg.param}")
 
     # read training dataset items
     # note that `dataset_reader.item_paths` is a generator
@@ -105,7 +97,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
     monitor.write_monitor_logger(percent=0.0)
 
     # fake training function
-    _dummy_work(config)
+    _dummy_work(edict(epoch=epoch))
 
     # suppose we have a long time training, and have saved the final model
     # use `env_config.output.models_dir` to get model output dir
@@ -114,7 +106,7 @@ def _run_training(env_config: env.EnvConfig) -> None:
     else:
         m = torchvision.models.vgg13(pretrained=False)
 
-    models_dir = env_config.output.models_dir
+    models_dir = cfg.ymir.output.models_dir
     os.makedirs(models_dir, exist_ok=True)
     torch.save(m, os.path.join(models_dir, f'{model}.pt'))
 
@@ -137,19 +129,16 @@ def _run_training(env_config: env.EnvConfig) -> None:
     monitor.write_monitor_logger(percent=1.0)
 
 
-def _run_mining(env_config: env.EnvConfig) -> None:
-    # use `env.get_merged_config` to get config file for training
-    executor_config = get_merged_config()
-    epoch: int = executor_config.get('epoch', 10)
+def _run_mining(cfg: edict) -> None:
+    epoch: int = cfg.param.get('epoch', 10)
 
-    weight_files = executor_config['model_params_path']
-    models_dir = env_config.input.models_dir
+    weight_files = cfg.param['model_params_path']
+    models_dir = cfg.ymir.input.models_dir
     weight_files = [os.path.join(models_dir, f) for f in weight_files]
     logging.info(f'use weight files {weight_files}')
 
-    config = edict(epoch=epoch)
     # use `logging` or `print` to write log to console
-    logging.info(f"mining config: {executor_config}")
+    logging.info(f"mining config: {cfg.param}")
 
     # use `dataset_reader.item_paths` to read candidate dataset items
     #   note that annotations path will be empty str if no annotations
@@ -165,7 +154,7 @@ def _run_mining(env_config: env.EnvConfig) -> None:
     monitor.write_monitor_logger(percent=0.0)
 
     # fake mining function
-    _dummy_work(config)
+    _dummy_work(edict(epoch=epoch))
 
     # write mining result
     #   here we give a fake score to each assets
@@ -179,20 +168,17 @@ def _run_mining(env_config: env.EnvConfig) -> None:
     monitor.write_monitor_logger(percent=1.0)
 
 
-def _run_infer(env_config: env.EnvConfig) -> None:
-    # use `env.get_merged_config` to get config file for training
-    executor_config = get_merged_config()
-    class_names: List[str] = executor_config['class_names']
-    epoch: int = executor_config.get('epoch', 10)
+def _run_infer(cfg: edict) -> None:
+    class_names: List[str] = cfg.param['class_names']
+    epoch: int = cfg.param.get('epoch', 10)
 
-    weight_files = executor_config['model_params_path']
-    models_dir = env_config.input.models_dir
+    weight_files = cfg.param['model_params_path']
+    models_dir = cfg.ymir.input.models_dir
     weight_files = [os.path.join(models_dir, f) for f in weight_files]
     logging.info(f'use weight files {weight_files}')
 
-    config = edict(epoch=epoch)
     # use `logging` or `print` to write log to console
-    logging.info(f"infer config: {executor_config}")
+    logging.info(f"infer config: {cfg.param}")
 
     # use `dataset_reader.item_paths` to read candidate dataset items
     # note that annotations path will be empty str if no annotations
@@ -209,7 +195,7 @@ def _run_infer(env_config: env.EnvConfig) -> None:
     monitor.write_monitor_logger(percent=0.0)
 
     # fake infer function
-    _dummy_work(config)
+    _dummy_work(edict(epoch=epoch))
 
     # write infer result
     fake_annotation = rw.Annotation(

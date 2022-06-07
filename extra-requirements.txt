@@ -4,4 +4,3 @@ torchvision
 tensorboard
 PyYAML
 tqdm
-ymir-exc
