@@ -47,7 +47,7 @@ def get_ymir_process(stage: YmirStage, p: float) -> float:
     else:
         raise NotImplementedError(f'unknown stage {stage}')
 
-def get_merged_config() -> dict:
+def get_merged_config() -> edict:
     """
     merge ymir_config, executor_config and code_config
     code_config will be overwrited by executor_config.

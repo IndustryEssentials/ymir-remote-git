@@ -389,15 +389,20 @@ class LoadStreams:
         return len(self.sources)  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
 
-def img2label_paths(img_paths, label_format='yolov5'):
+def img2label_paths(img_paths, label_format='yolov5', index_file=None):
+    """
+    img_paths: the image file path list
+    label_format: yolov5 or ymir
+    index_file: the index file for ymir, for each line in index file:
+        line = f"{img_path}\t{ann_path}\n"
+    """
     # Define label paths as a function of image paths
 
     if label_format == 'yolov5':
         sa, sb = f'{os.sep}images{os.sep}', f'{os.sep}labels{os.sep}'  # /images/, /labels/ substrings
         return [sb.join(x.rsplit(sa, 1)).rsplit('.', 1)[0] + '.txt' for x in img_paths]
     elif label_format == 'ymir':
-        ymir_env = env.get_current_env()
-        with open(ymir_env.input.training_index_file, 'r') as fp:
+        with open(index_file, 'r') as fp:
             lines = fp.readlines()
 
         img2label_map = dict()
@@ -466,7 +471,7 @@ class LoadImagesAndLabels(Dataset):
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
 
         # Check cache
-        self.label_files = img2label_paths(self.im_files, label_format)  # labels
+        self.label_files = img2label_paths(self.im_files, label_format, self.path)  # labels
         cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache')
         try:
             cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
@@ -490,7 +495,7 @@ class LoadImagesAndLabels(Dataset):
         self.labels = list(labels)
         self.shapes = np.array(shapes, dtype=np.float64)
         self.im_files = list(cache.keys())  # update
-        self.label_files = img2label_paths(cache.keys(), label_format)  # update
+        self.label_files = img2label_paths(cache.keys(), label_format, self.path)  # update
         n = len(shapes)  # number of images
         bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
         nb = bi[-1] + 1  # number of batches
@@ -964,17 +969,20 @@ def verify_image_label(args):
         if os.path.isfile(lb_file):
             nf = 1  # label found
             with open(lb_file) as f:
-                lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
                 if lb_format == 'ymir':  # non-normalized int xyxy
+                    lb = [x.split(',') for x in f.read().strip().splitlines() if len(x)]
                     classes = np.array([x[0] for x in lb], dtype=np.float32)
                     width, height = imagesize.get(im_file)
                     ymir_xyxy = np.array([x[1:] for x in lb], dtype=np.float32)
                     lb = np.concatenate(
                         (classes.reshape(-1, 1), ymir_xyxy2xywh(ymir_xyxy, width, height)), 1)  # (cls, xywh)
                 elif any(len(x) > 6 for x in lb):  # is segment
+                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
                     classes = np.array([x[0] for x in lb], dtype=np.float32)
                     segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
                     lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
+                else:
+                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
 
                 lb = np.array(lb, dtype=np.float32)
             nl = len(lb)
