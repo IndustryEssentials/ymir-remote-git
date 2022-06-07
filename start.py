@@ -6,57 +6,53 @@ import subprocess
 import sys
 
 import cv2
+from easydict import EasyDict as edict
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from utils.ymir_yolov5 import YmirYolov5, convert_ymir_to_yolov5, get_merged_config, get_weight_file, get_ymir_process
+from utils.ymir_yolov5 import (YmirStage, YmirYolov5, convert_ymir_to_yolov5, get_merged_config, get_weight_file,
+                               get_ymir_process)
 
 
 def start() -> int:
-    env_config = env.get_current_env()
+    cfg = get_merged_config()
 
-    logging.info(f'env_config: {env_config}')
+    logging.info(f'merged config: {cfg}')
 
-    if env_config.run_training:
-        _run_training(env_config)
-    elif env_config.run_mining:
-        _run_mining(env_config)
-    elif env_config.run_infer:
-        _run_infer(env_config)
+    if cfg.ymir.run_training:
+        _run_training(cfg)
+    elif cfg.ymir.run_mining:
+        _run_mining(cfg)
+    elif cfg.ymir.run_infer:
+        _run_infer(cfg)
     else:
         logging.warning('no task running')
 
     return 0
 
 
-def _run_training(env_config: env.EnvConfig) -> None:
+def _run_training(cfg: edict) -> None:
     """
     function for training task
-    1. get merged config from ymir_exc and code_config file
-    2. convert dataset
-    3. training model
-    4. save model weight/hyperparameter/... to design directory
+    1. convert dataset
+    2. training model
+    3. save model weight/hyperparameter/... to design directory
     """
-    # 1. get merged config
-    executor_config = get_merged_config()
-
-    logging.info(f"training config: {executor_config}")
-
-    # 2. convert dataset
+    # 1. convert dataset
     logging.info('convert ymir dataset to yolov5 dataset')
-    out_dir = env_config.output.root_dir
-    convert_ymir_to_yolov5(out_dir)
-    monitor.write_monitor_logger(percent=get_ymir_process(stage='preprocess', p=1.0))
+    out_dir = cfg.ymir.output.root_dir
+    convert_ymir_to_yolov5(cfg, out_dir)
+    monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
 
-    # 3. training model
-    epochs = executor_config['epochs']
-    batch_size = executor_config['batch_size']
-    model = executor_config['model']
-    img_size = executor_config['img_size']
-    weights = get_weight_file(try_download=True)
+    # 2. training model
+    epochs = cfg.param.epochs
+    batch_size = cfg.param.batch_size
+    model = cfg.param.model
+    img_size = cfg.param.img_size
+    weights = get_weight_file(cfg, try_download=True)
 
-    models_dir = env_config.output.models_dir
+    models_dir = cfg.ymir.output.models_dir
     command = f'python3 train.py --epochs {epochs} ' + \
         f'--batch-size {batch_size} --data {out_dir}/data.yaml --project /out ' + \
         f'--cfg models/{model}.yaml --name models --weights {weights} ' + \
@@ -65,10 +61,10 @@ def _run_training(env_config: env.EnvConfig) -> None:
     logging.info(f'start training: {command}')
 
     subprocess.run(command.split(), check=True)
-    monitor.write_monitor_logger(percent=get_ymir_process(stage='task', p=1.0))
+    monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.TASK, p=1.0))
 
-    # 4. convert to onnx and save model weight to design directory
-    opset = executor_config['opset']
+    # 3. convert to onnx and save model weight to design directory
+    opset = cfg.param.opset
     command = f'python3 export.py --weights {models_dir}/best.pt --opset {opset} --include onnx'
     logging.info(f'export onnx weight: {command}')
     subprocess.run(command.split(), check=True)
@@ -80,14 +76,11 @@ def _run_training(env_config: env.EnvConfig) -> None:
     monitor.write_monitor_logger(percent=1.0)
 
 
-def _run_mining(env_config: env.EnvConfig) -> None:
-    executor_config = get_merged_config()
-    logging.info(f"mining config: {executor_config}")
-
+def _run_mining(cfg: edict()) -> None:
     logging.info('convert ymir dataset to yolov5 dataset')
-    out_dir = osp.join(env_config.output.root_dir, 'yolov5_dataset')
-    convert_ymir_to_yolov5(out_dir)
-    monitor.write_monitor_logger(percent=get_ymir_process(stage='preprocess', p=1.0))
+    out_dir = osp.join(cfg.ymir.output.root_dir, 'yolov5_dataset')
+    convert_ymir_to_yolov5(cfg, out_dir)
+    monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
 
     command = 'python3 mining/mining_cald.py'
     logging.info(f'mining: {command}')
@@ -95,19 +88,16 @@ def _run_mining(env_config: env.EnvConfig) -> None:
     monitor.write_monitor_logger(percent=1.0)
 
 
-def _run_infer(env_config: env.EnvConfig) -> None:
-    executor_config = get_merged_config()
-    logging.info(f"infer config: {executor_config}")
-
+def _run_infer(cfg: edict) -> None:
     # generate data.yaml for infer
     logging.info('convert ymir dataset to yolov5 dataset')
-    out_dir = osp.join(env_config.output.root_dir, 'yolov5_dataset')
-    convert_ymir_to_yolov5(out_dir)
-    monitor.write_monitor_logger(percent=get_ymir_process(stage='preprocess', p=1.0))
+    out_dir = osp.join(cfg.ymir.output.root_dir, 'yolov5_dataset')
+    convert_ymir_to_yolov5(cfg, out_dir)
+    monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
 
     N = dr.items_count(env.DatasetType.CANDIDATE)
     infer_result = dict()
-    model = YmirYolov5()
+    model = YmirYolov5(cfg)
     idx = -1
 
     monitor_gap = max(1, N // 100)
@@ -118,7 +108,7 @@ def _run_infer(env_config: env.EnvConfig) -> None:
         idx += 1
 
         if idx % monitor_gap == 0:
-            percent = get_ymir_process(stage='task', p=idx / N)
+            percent = get_ymir_process(stage=YmirStage.TASK, p=idx / N)
             monitor.write_monitor_logger(percent=percent)
 
     rw.write_infer_result(infer_result=infer_result)

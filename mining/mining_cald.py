@@ -15,7 +15,7 @@ from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
 from mining.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from utils.ymir_yolov5 import BBOX, CV_IMAGE, YmirYolov5, get_ymir_process
+from utils.ymir_yolov5 import BBOX, CV_IMAGE, YmirYolov5, YmirStage, get_ymir_process
 
 
 def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
@@ -86,7 +86,7 @@ class MiningCald(YmirYolov5):
             idx += 1
 
             if idx % monitor_gap == 0:
-                percent = get_ymir_process(stage='task', p=idx / N)
+                percent = get_ymir_process(stage=YmirStage.TASK, p=idx / N)
                 monitor.write_monitor_logger(percent=percent)
 
         return mining_result

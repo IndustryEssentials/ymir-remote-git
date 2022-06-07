@@ -55,8 +55,8 @@ from utils.loss import ComputeLoss
 from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
-from utils.ymir_yolov5 import write_ymir_training_result, get_ymir_process
-from ymir_exc import monitor, env
+from utils.ymir_yolov5 import YmirStage, write_ymir_training_result, get_ymir_process, get_merged_config
+from ymir_exc import monitor
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
@@ -68,6 +68,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
     log_dir, label_format = Path(opt.log_dir), opt.label_format
+    ymir_cfg = get_merged_config()
     callbacks.run('on_pretrain_routine_start')
 
     # Directories
@@ -314,7 +315,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
         # ymir monitor
         if epoch % monitor_gap == 0:
-            percent = get_ymir_process(stage='task', p=epoch/(epochs-start_epoch+1))
+            percent = get_ymir_process(stage=YmirStage.TASK, p=epoch/(epochs-start_epoch+1))
             monitor.write_monitor_logger(percent=percent)
 
         # Update image weights (optional, single-GPU only)
@@ -433,10 +434,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
-                write_ymir_training_result(results, maps, rewrite=False)
+                write_ymir_training_result(ymir_cfg, results, maps, rewrite=False)
                 if best_fitness == fi:
                     torch.save(ckpt, best)
-                    write_ymir_training_result(results, maps, rewrite=True)
+                    write_ymir_training_result(ymir_cfg, results, maps, rewrite=True)
                 if (epoch > 0) and (opt.save_period > 0) and (epoch % opt.save_period == 0):
                     torch.save(ckpt, w / f'epoch{epoch}.pt')
                 del ckpt
@@ -561,7 +562,8 @@ def main(opt, callbacks=Callbacks()):
         if opt.name == 'cfg':
             opt.name = Path(opt.cfg).stem  # use model.yaml as name
         opt.save_dir = str(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))
-        opt.log_dir = env.get_current_env().output.tensorboard_dir
+        ymir_cfg = get_merged_config()
+        opt.log_dir = ymir_cfg.ymir.output.tensorboard_dir
 
 
     # DDP mode
