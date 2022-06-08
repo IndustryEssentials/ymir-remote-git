@@ -67,7 +67,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
-    log_dir, label_format = Path(opt.log_dir), opt.label_format
+    log_dir = Path(opt.log_dir)
     ymir_cfg = get_merged_config()
     callbacks.run('on_pretrain_routine_start')
 
@@ -236,7 +236,6 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                               image_weights=opt.image_weights,
                                               quad=opt.quad,
                                               prefix=colorstr('train: '),
-                                              label_format=label_format,
                                               shuffle=True)
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
@@ -255,8 +254,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                        rank=-1,
                                        workers=workers * 2,
                                        pad=0.5,
-                                       prefix=colorstr('val: '),
-                                       label_format=label_format)[0]
+                                       prefix=colorstr('val: '))[0]
 
         if not resume:
             labels = np.concatenate(dataset.labels, 0)
