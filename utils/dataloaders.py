@@ -434,7 +434,7 @@ class LoadImagesAndLabels(Dataset):
                             f.append(image_path)
                             img2label_map[image_path] = label_path
                 else:
-                    raise Exception(f'{prefix}{p} is not valid file')
+                    raise Exception(f'{prefix}{p} is not valid ymir index file')
             self.im_files = sorted(x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS)
             # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
             assert self.im_files, f'{prefix}No images found'
@@ -940,13 +940,14 @@ def verify_image_label(args):
             nf = 1  # label found
             with open(lb_file) as f:
                 lb = [x.split(',') for x in f.read().strip().splitlines() if len(x)]
+
+            nl = len(lb)
+            if nl:
                 classes = np.array([x[0] for x in lb], dtype=np.float32)
                 width, height = imagesize.get(im_file)
                 ymir_xyxy = np.array([x[1:] for x in lb], dtype=np.float32)
                 lb = np.concatenate(
                     (classes.reshape(-1, 1), ymir_xyxy2xywh(ymir_xyxy, width, height)), 1)  # (cls, xywh)
-            nl = len(lb)
-            if nl:
                 assert lb.shape[1] == 5, f'labels require 5 columns, {lb.shape[1]} columns detected'
                 assert (lb >= 0).all(), f'negative label values {lb[lb < 0]}'
                 assert (lb[:, 1:] <= 1).all(), f'non-normalized or out of bounds coordinates {lb[:, 1:][lb[:, 1:] > 1]}'
