@@ -1,0 +1,3 @@
+epoch: 10
+model: vgg11
+map: 0.3

@@ -1,0 +1,6 @@
+easydict
+torch
+torchvision
+tensorboard
+PyYAML
+tqdm
