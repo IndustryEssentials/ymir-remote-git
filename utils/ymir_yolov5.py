@@ -50,7 +50,7 @@ def get_ymir_process(stage: YmirStage, p: float) -> float:
 def get_merged_config() -> edict:
     """
     merge ymir_config, executor_config and code_config
-    code_config will be overwrited by executor_config.
+    code_config will be overwritten by executor_config.
     """
     def get_code_config(code_config_file: str) -> dict:
         if code_config_file is None:

@@ -108,7 +108,6 @@ def create_dataloader(path,
                       image_weights=False,
                       quad=False,
                       prefix='',
-                      label_format='yolov5',
                       shuffle=False):
     if rect and shuffle:
         LOGGER.warning('WARNING: --rect is incompatible with DataLoader shuffle, setting shuffle=False')
@@ -126,8 +125,7 @@ def create_dataloader(path,
             stride=int(stride),
             pad=pad,
             image_weights=image_weights,
-            prefix=prefix,
-            label_format=label_format)
+            prefix=prefix)
 
     batch_size = min(batch_size, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
@@ -389,30 +387,8 @@ class LoadStreams:
         return len(self.sources)  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
 
-def img2label_paths(img_paths, label_format='yolov5', index_file=None):
-    """
-    img_paths: the image file path list
-    label_format: yolov5 or ymir
-    index_file: the index file for ymir, for each line in index file:
-        line = f"{img_path}\t{ann_path}\n"
-    """
-    # Define label paths as a function of image paths
-
-    if label_format == 'yolov5':
-        sa, sb = f'{os.sep}images{os.sep}', f'{os.sep}labels{os.sep}'  # /images/, /labels/ substrings
-        return [sb.join(x.rsplit(sa, 1)).rsplit('.', 1)[0] + '.txt' for x in img_paths]
-    elif label_format == 'ymir':
-        with open(index_file, 'r') as fp:
-            lines = fp.readlines()
-
-        img2label_map = dict()
-        for line in lines:
-            img, label = line.strip().split()
-            img2label_map[img] = label
-
-        return [img2label_map[img] for img in img_paths]
-    else:
-        raise Exception(f'unknown label format {label_format}')
+def img2label_paths(img_paths, img2label_map={}):
+    return [img2label_map[img] for img in img_paths]
 
 
 class LoadImagesAndLabels(Dataset):
@@ -432,8 +408,7 @@ class LoadImagesAndLabels(Dataset):
                  single_cls=False,
                  stride=32,
                  pad=0.0,
-                 prefix='',
-                 label_format='yolov5'):
+                 prefix=''):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -447,23 +422,19 @@ class LoadImagesAndLabels(Dataset):
 
         try:
             f = []  # image files
+            img2label_map = dict() # map image files to label files
             for p in path if isinstance(path, list) else [path]:
                 p = Path(p)  # os-agnostic
-                if p.is_dir():  # dir
-                    f += glob.glob(str(p / '**' / '*.*'), recursive=True)
-                    # f = list(p.rglob('*.*'))  # pathlib
-                elif p.is_file():  # file
-
+                if p.is_file():  # ymir index file
                     with open(p) as t:
                         t = t.read().strip().splitlines()
-                        if label_format == 'yolov5':
-                            parent = str(p.parent) + os.sep
-                            f += [x.replace('./', parent) if x.startswith('./') else x for x in t]  # local to global path
-                            # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
-                        elif label_format == 'ymir':
-                            f += [x.split()[0] for x in t]
+                        for x in t:
+                            # x = f'{image_path}\t{label_path}\n'
+                            image_path, label_path = x.split()
+                            f.append(image_path)
+                            img2label_map[image_path]=label_path
                 else:
-                    raise Exception(f'{prefix}{p} does not exist')
+                    raise Exception(f'{prefix}{p} is not valid file')
             self.im_files = sorted(x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS)
             # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
             assert self.im_files, f'{prefix}No images found'
@@ -471,14 +442,14 @@ class LoadImagesAndLabels(Dataset):
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
 
         # Check cache
-        self.label_files = img2label_paths(self.im_files, label_format, self.path)  # labels
+        self.label_files = img2label_paths(self.im_files, img2label_map)  # labels
         cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache')
         try:
             cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
             assert cache['version'] == self.cache_version  # same version
             assert cache['hash'] == get_hash(self.label_files + self.im_files)  # same hash
         except Exception:
-            cache, exists = self.cache_labels(cache_path, prefix, label_format), False  # cache
+            cache, exists = self.cache_labels(cache_path, prefix), False  # cache
 
         # Display cache
         nf, nm, ne, nc, n = cache.pop('results')  # found, missing, empty, corrupt, total
@@ -495,7 +466,7 @@ class LoadImagesAndLabels(Dataset):
         self.labels = list(labels)
         self.shapes = np.array(shapes, dtype=np.float64)
         self.im_files = list(cache.keys())  # update
-        self.label_files = img2label_paths(cache.keys(), label_format, self.path)  # update
+        self.label_files = img2label_paths(cache.keys(), img2label_map)  # update
         n = len(shapes)  # number of images
         bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
         nb = bi[-1] + 1  # number of batches
@@ -559,13 +530,13 @@ class LoadImagesAndLabels(Dataset):
                 pbar.desc = f'{prefix}Caching images ({gb / 1E9:.1f}GB {cache_images})'
             pbar.close()
 
-    def cache_labels(self, path=Path('./labels.cache'), prefix='', label_format='yolov5'):
+    def cache_labels(self, path=Path('./labels.cache'), prefix=''):
         # Cache dataset labels, check images and read shapes
         x = {}  # dict
         nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number missing, found, empty, corrupt, messages
         desc = f"{prefix}Scanning '{path.parent / path.stem}' images and labels..."
         with Pool(NUM_THREADS) as pool:
-            pbar = tqdm(pool.imap(verify_image_label, zip(self.im_files, self.label_files, repeat(prefix), repeat(label_format))),
+            pbar = tqdm(pool.imap(verify_image_label, zip(self.im_files, self.label_files, repeat(prefix))),
                         desc=desc,
                         total=len(self.im_files),
                         bar_format=BAR_FORMAT)
@@ -948,8 +919,7 @@ def autosplit(path=DATASETS_DIR / 'coco128/images', weights=(0.9, 0.1, 0.0), ann
 
 def verify_image_label(args):
     # Verify one image-label pair
-    im_file, lb_file, prefix, lb_format = args
-    assert lb_format in ['yolov5', 'ymir'], f'unknown label format {lb_format}'
+    im_file, lb_file, prefix = args
     nm, nf, ne, nc, msg, segments = 0, 0, 0, 0, '', []  # number (missing, found, empty, corrupt), message, segments
     try:
         # verify images
@@ -969,20 +939,12 @@ def verify_image_label(args):
         if os.path.isfile(lb_file):
             nf = 1  # label found
             with open(lb_file) as f:
-                if lb_format == 'ymir':  # non-normalized int xyxy
-                    lb = [x.split(',') for x in f.read().strip().splitlines() if len(x)]
-                    classes = np.array([x[0] for x in lb], dtype=np.float32)
-                    width, height = imagesize.get(im_file)
-                    ymir_xyxy = np.array([x[1:] for x in lb], dtype=np.float32)
-                    lb = np.concatenate(
-                        (classes.reshape(-1, 1), ymir_xyxy2xywh(ymir_xyxy, width, height)), 1)  # (cls, xywh)
-                elif any(len(x) > 6 for x in lb):  # is segment
-                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
-                    classes = np.array([x[0] for x in lb], dtype=np.float32)
-                    segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
-                    lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
-                else:
-                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                lb = [x.split(',') for x in f.read().strip().splitlines() if len(x)]
+                classes = np.array([x[0] for x in lb], dtype=np.float32)
+                width, height = imagesize.get(im_file)
+                ymir_xyxy = np.array([x[1:] for x in lb], dtype=np.float32)
+                lb = np.concatenate(
+                    (classes.reshape(-1, 1), ymir_xyxy2xywh(ymir_xyxy, width, height)), 1)  # (cls, xywh)
 
                 lb = np.array(lb, dtype=np.float32)
             nl = len(lb)

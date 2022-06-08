@@ -57,7 +57,7 @@ def _run_training(cfg: edict) -> None:
         f'--batch-size {batch_size} --data {out_dir}/data.yaml --project /out ' + \
         f'--cfg models/{model}.yaml --name models --weights {weights} ' + \
         f'--img-size {img_size} --hyp data/hyps/hyp.scratch-low.yaml ' + \
-        '--label-format ymir --exist-ok'
+        '--exist-ok'
     logging.info(f'start training: {command}')
 
     subprocess.run(command.split(), check=True)
