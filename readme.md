@@ -8,14 +8,6 @@
 - [ymir-executor](https://github.com/IndustryEssentials/ymir-executor) ymir镜像库
 - [ymir-executor api](https://github.com/IndustryEssentials/ymir/blob/master/docs/ymir-cmd-container.md)
 
-ymir-remote-git 测试结果
-- `git_url=https://github.com/IndustryEssentials/ymir-remote-git`
-
-| docker image | git-branch | task | result |
-| - | - | - | - |
-| youdaoyzbx/ymir-executor:live-code-base-tmi | base | training/mining/infer | ✔️/✔️/✔️ |
-| youdaoyzbx/ymir-executor:live-code-base-tmi | ymir-remote-v7.0 | training/mining/infer | ✔️/✔️/✔️ |
-
 ## 基本命名
 
 - `ymir-executor`: ymir镜像，可执行训练/挖掘/推理任务中的一种或多种

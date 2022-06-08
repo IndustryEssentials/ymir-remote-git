@@ -70,18 +70,13 @@ def _run_training(cfg: edict) -> None:
     3. how to write logs
     4. how to write training result
     """
-    # use `env.get_merged_config` to get config file for training
+    # get config
     class_names: List[str] = cfg.param['class_names']
-    expected_mAP: float = cfg.param.get('map', 0.6)
-    epoch: int = cfg.param.get('epoch', 10)
-    model: str = cfg.param.get('model', 'vgg11')
-
-    # use `logging` or `print` to write log to console
-    #   notice that logging.basicConfig is invoked at executor.env
-    logging.info(f"training config: {cfg.param}")
+    expected_mAP: float = cfg.param.get('map')
+    model: str = cfg.param.get('model')
 
     # read training dataset items
-    # note that `dataset_reader.item_paths` is a generator
+    # note that `dr.item_paths` is a generator
     for asset_path, ann_path in dr.item_paths(env.DatasetType.TRAINING):
         logging.info(f"asset: {asset_path}, annotation: {ann_path}")
         with open(ann_path, 'r') as fp:
@@ -97,10 +92,10 @@ def _run_training(cfg: edict) -> None:
     monitor.write_monitor_logger(percent=0.0)
 
     # fake training function
-    _dummy_work(edict(epoch=epoch))
+    _dummy_work(cfg)
 
     # suppose we have a long time training, and have saved the final model
-    # use `env_config.output.models_dir` to get model output dir
+    # use `cfg.ymir.output.models_dir` to get model output dir
     if model == 'vgg11':
         m = torchvision.models.vgg11(pretrained=False)
     else:
@@ -126,21 +121,18 @@ def _run_training(cfg: edict) -> None:
                                        for class_name in class_names})
 
     # if task done, write 100% percent log
+    logging.info('task done')
     monitor.write_monitor_logger(percent=1.0)
 
 
 def _run_mining(cfg: edict) -> None:
-    epoch: int = cfg.param.get('epoch', 10)
-
+    # the weight_files will be the model_names in _run_training()
     weight_files = cfg.param['model_params_path']
     models_dir = cfg.ymir.input.models_dir
     weight_files = [os.path.join(models_dir, f) for f in weight_files]
     logging.info(f'use weight files {weight_files}')
 
-    # use `logging` or `print` to write log to console
-    logging.info(f"mining config: {cfg.param}")
-
-    # use `dataset_reader.item_paths` to read candidate dataset items
+    # use `dr.item_paths` to read candidate dataset items
     #   note that annotations path will be empty str if no annotations
     asset_paths = []
     for asset_path, _ in dr.item_paths(env.DatasetType.CANDIDATE):
@@ -154,7 +146,7 @@ def _run_mining(cfg: edict) -> None:
     monitor.write_monitor_logger(percent=0.0)
 
     # fake mining function
-    _dummy_work(edict(epoch=epoch))
+    _dummy_work(cfg)
 
     # write mining result
     #   here we give a fake score to each assets
@@ -169,18 +161,14 @@ def _run_mining(cfg: edict) -> None:
 
 
 def _run_infer(cfg: edict) -> None:
-    class_names: List[str] = cfg.param['class_names']
-    epoch: int = cfg.param.get('epoch', 10)
-
+    # the weight_files will be the model_names in _run_training()
     weight_files = cfg.param['model_params_path']
+    class_names: List[str] = cfg.param['class_names']
     models_dir = cfg.ymir.input.models_dir
     weight_files = [os.path.join(models_dir, f) for f in weight_files]
     logging.info(f'use weight files {weight_files}')
 
-    # use `logging` or `print` to write log to console
-    logging.info(f"infer config: {cfg.param}")
-
-    # use `dataset_reader.item_paths` to read candidate dataset items
+    # use `dr.item_paths` to read candidate dataset items
     # note that annotations path will be empty str if no annotations
     asset_paths: List[str] = []
     for asset_path, _ in dr.item_paths(env.DatasetType.CANDIDATE):
@@ -195,7 +183,7 @@ def _run_infer(cfg: edict) -> None:
     monitor.write_monitor_logger(percent=0.0)
 
     # fake infer function
-    _dummy_work(edict(epoch=epoch))
+    _dummy_work(cfg)
 
     # write infer result
     fake_annotation = rw.Annotation(
@@ -211,16 +199,16 @@ def _run_infer(cfg: edict) -> None:
     monitor.write_monitor_logger(percent=1.0)
 
 
-def _dummy_work(config: edict) -> None:
-    env_config = env.get_current_env()
-    if env_config.run_training:
-        tb_log = SummaryWriter(env_config.output.tensorboard_dir)
+def _dummy_work(cfg: edict) -> None:
+    if cfg.ymir.run_training:
+        # use cfg.ymir.output.tensorboard_dir to get tensorboard log directory.
+        tb_log = SummaryWriter(cfg.ymir.output.tensorboard_dir)
 
-    for e in tqdm(range(config.epoch)):
-        if env_config.run_training:
+    for e in tqdm(range(cfg.param.epoch)):
+        if cfg.ymir.run_training:
             tb_log.add_scalar("fake_loss", 10/(1+e), e)
         time.sleep(1)
-        monitor.write_monitor_logger(percent=e/config.epoch)
+        monitor.write_monitor_logger(percent=e/cfg.param.epoch)
 
 
 if __name__ == '__main__':
