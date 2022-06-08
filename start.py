@@ -11,8 +11,8 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from utils.ymir_yolov5 import (YmirStage, YmirYolov5, convert_ymir_to_yolov5, get_merged_config, get_weight_file,
-                               get_ymir_process)
+from utils.ymir_yolov5 import (YmirStage, YmirYolov5, convert_ymir_to_yolov5, download_weight_file, get_merged_config,
+                               get_weight_file, get_ymir_process)
 
 
 def start() -> int:
@@ -50,7 +50,10 @@ def _run_training(cfg: edict) -> None:
     batch_size = cfg.param.batch_size
     model = cfg.param.model
     img_size = cfg.param.img_size
-    weights = get_weight_file(cfg, try_download=True)
+    weights = get_weight_file(cfg)
+    if not weights:
+        # download pretrained weight
+        weights = download_weight_file(cfg.param.model)
 
     models_dir = cfg.ymir.output.models_dir
     command = f'python3 train.py --epochs {epochs} ' + \

@@ -75,13 +75,10 @@ def get_merged_config() -> edict:
     return merged_cfg
 
 
-def get_weight_file(cfg: edict, try_download: bool = True) -> str:
+def get_weight_file(cfg: edict) -> str:
     """
     return the weight file path by priority
-
-    1. find weight file in cfg.param.model_params_path or cfg.param.model_params_path
-    2. if try_download and no weight file offered
-            for training task, yolov5 will download it from github.
+    find weight file in cfg.param.model_params_path or cfg.param.model_params_path
     """
     if cfg.ymir.run_training:
         model_params_path = cfg.param.pretrained_model_paths
@@ -100,24 +97,11 @@ def get_weight_file(cfg: edict, try_download: bool = True) -> str:
             if f.endswith('.pt'):
                 return osp.join(model_dir, f)
 
-    # if no weight file offered
-    if try_download:
-        if cfg.ymir.run_training:
-            model_name = cfg.param.model
-            weights = attempt_download(f'{model_name}.pt')
-            return weights
-        else:
-            # donot allow download weight for mining and infer
-            raise Exception('try_download is allowed for training task only ' +
-                            'please offer model weight in cfg.param')
-    else:
-        if cfg.ymir.run_training:
-            # no pretrained weight, training from scratch
-            return ""
-        else:
-            raise Exception(f'no weight file offered in {model_dir} ' +
-                            'please offer model weight in cfg.param')
+    return ""
 
+def download_weight_file(model_name):
+    weights = attempt_download(f'{model_name}.pt')
+    return weights
 
 class YmirYolov5():
     """
@@ -143,7 +127,7 @@ class YmirYolov5():
         self.img_size = imgsz
 
     def init_detector(self, device: torch.device) -> DetectMultiBackend:
-        weights = get_weight_file(self.cfg, try_download=False)
+        weights = get_weight_file(self.cfg)
 
         model = DetectMultiBackend(weights=weights,
                                    device=device,
