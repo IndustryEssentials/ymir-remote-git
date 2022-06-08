@@ -67,8 +67,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
-    log_dir = Path(opt.log_dir)
-    ymir_cfg = get_merged_config()
+    ymir_cfg = opt.ymir_cfg
+    log_dir = Path(ymir_cfg.ymir.output.tensorboard_dir)
     callbacks.run('on_pretrain_routine_start')
 
     # Directories
@@ -560,7 +560,7 @@ def main(opt, callbacks=Callbacks()):
             opt.name = Path(opt.cfg).stem  # use model.yaml as name
         opt.save_dir = str(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))
         ymir_cfg = get_merged_config()
-        opt.log_dir = ymir_cfg.ymir.output.tensorboard_dir
+        opt.ymir_cfg = ymir_cfg
 
 
     # DDP mode
