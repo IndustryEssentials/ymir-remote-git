@@ -23,7 +23,8 @@ from utils.torch_utils import select_device
 class YmirStage(IntEnum):
     PREPROCESS = 1  # convert dataset
     TASK = 2    # training/mining/infer
-    POSTPROCESS = 3 # export model
+    POSTPROCESS = 3  # export model
+
 
 BBOX = NDArray[Shape['*,4'], Any]
 CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
@@ -35,7 +36,7 @@ def get_ymir_process(stage: YmirStage, p: float) -> float:
     TASK_PERCENT = 0.8
     POSTPROCESS_PERCENT = 0.1
 
-    if p<0 or p>1.0:
+    if p < 0 or p > 1.0:
         raise Exception(f'p not in [0,1], p={p}')
 
     if stage == YmirStage.PREPROCESS:
@@ -46,6 +47,7 @@ def get_ymir_process(stage: YmirStage, p: float) -> float:
         return PREPROCESS_PERCENT + TASK_PERCENT + POSTPROCESS_PERCENT * p
     else:
         raise NotImplementedError(f'unknown stage {stage}')
+
 
 def get_merged_config() -> edict:
     """
@@ -64,13 +66,14 @@ def get_merged_config() -> edict:
     code_cfg = get_code_config(code_config_file)
     code_cfg.update(exe_cfg)
 
-    merged_cfg=edict()
+    merged_cfg = edict()
     # the hyperparameter information
-    merged_cfg.param=code_cfg
+    merged_cfg.param = code_cfg
 
     # the ymir path information
-    merged_cfg.ymir=env.get_current_env()
+    merged_cfg.ymir = env.get_current_env()
     return merged_cfg
+
 
 def get_weight_file(cfg: edict, try_download: bool = True) -> str:
     """
