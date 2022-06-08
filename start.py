@@ -53,7 +53,7 @@ def _run_training(cfg: edict) -> None:
     weights = get_weight_file(cfg)
     if not weights:
         # download pretrained weight
-        weights = download_weight_file(cfg.param.model)
+        weights = download_weight_file(model)
 
     models_dir = cfg.ymir.output.models_dir
     command = f'python3 train.py --epochs {epochs} ' + \

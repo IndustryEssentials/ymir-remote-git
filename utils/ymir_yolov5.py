@@ -3,7 +3,7 @@ function for combine ymir and yolov5
 """
 import os.path as osp
 from enum import IntEnum
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -99,9 +99,11 @@ def get_weight_file(cfg: edict) -> str:
 
     return ""
 
+
 def download_weight_file(model_name):
     weights = attempt_download(f'{model_name}.pt')
     return weights
+
 
 class YmirYolov5():
     """
@@ -236,3 +238,15 @@ def write_ymir_training_result(cfg: edict, results: Tuple, maps: NDArray, rewrit
                              classAPs={class_name: v
                                        for class_name, v in zip(class_names, maps.tolist())})
     return 0
+
+
+def edict2dict(edict_obj: edict) -> Dict:
+    dict_obj = {}
+
+    for key, vals in edict_obj.items():
+        if isinstance(vals, edict):
+            dict_obj[key] = edict2dict(vals)
+        else:
+            dict_obj[key] = vals
+
+    return dict_obj
