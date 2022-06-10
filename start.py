@@ -41,8 +41,7 @@ def _run_training(cfg: edict) -> None:
     """
     # 1. convert dataset
     logging.info('convert ymir dataset to yolov5 dataset')
-    out_dir = cfg.ymir.output.root_dir
-    convert_ymir_to_yolov5(cfg, out_dir)
+    convert_ymir_to_yolov5(cfg)
     monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
 
     # 2. training model
@@ -56,6 +55,7 @@ def _run_training(cfg: edict) -> None:
         weights = download_weight_file(model)
 
     models_dir = cfg.ymir.output.models_dir
+    out_dir = cfg.ymir.output.root_dir
     command = f'python3 train.py --epochs {epochs} ' + \
         f'--batch-size {batch_size} --data {out_dir}/data.yaml --project /out ' + \
         f'--cfg models/{model}.yaml --name models --weights {weights} ' + \
@@ -81,8 +81,7 @@ def _run_training(cfg: edict) -> None:
 
 def _run_mining(cfg: edict()) -> None:
     logging.info('convert ymir dataset to yolov5 dataset')
-    out_dir = osp.join(cfg.ymir.output.root_dir, 'yolov5_dataset')
-    convert_ymir_to_yolov5(cfg, out_dir)
+    convert_ymir_to_yolov5(cfg)
     monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
 
     command = 'python3 mining/mining_cald.py'
@@ -94,8 +93,7 @@ def _run_mining(cfg: edict()) -> None:
 def _run_infer(cfg: edict) -> None:
     # generate data.yaml for infer
     logging.info('convert ymir dataset to yolov5 dataset')
-    out_dir = osp.join(cfg.ymir.output.root_dir, 'yolov5_dataset')
-    convert_ymir_to_yolov5(cfg, out_dir)
+    convert_ymir_to_yolov5(cfg)
     monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
 
     N = dr.items_count(env.DatasetType.CANDIDATE)

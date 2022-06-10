@@ -194,7 +194,7 @@ class YmirYolov5():
         return anns
 
 
-def convert_ymir_to_yolov5(cfg: edict, output_root_dir: str) -> None:
+def convert_ymir_to_yolov5(cfg: edict) -> None:
     """
     convert ymir format dataset to yolov5 format
     output_root_dir: the output root dir
@@ -206,7 +206,7 @@ def convert_ymir_to_yolov5(cfg: edict, output_root_dir: str) -> None:
                 nc=len(cfg.param.class_names),
                 names=cfg.param.class_names)
 
-    with open(osp.join(output_root_dir, 'data.yaml'), 'w') as fw:
+    with open(osp.join(cfg.ymir.output.root_dir, 'data.yaml'), 'w') as fw:
         fw.write(yaml.safe_dump(data))
 
 
