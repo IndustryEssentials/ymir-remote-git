@@ -131,10 +131,11 @@ class YmirYolov5():
     def init_detector(self, device: torch.device) -> DetectMultiBackend:
         weights = get_weight_file(self.cfg)
 
+        data_ymal = osp.join(self.cfg.ymir.output.root_dir, 'data.yaml')
         model = DetectMultiBackend(weights=weights,
                                    device=device,
                                    dnn=False,  # not use opencv dnn for onnx inference
-                                   data='data.yaml')  # dataset.yaml path
+                                   data=data_ymal)  # dataset.yaml path
 
         return model
 
