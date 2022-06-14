@@ -51,8 +51,7 @@ def start() -> int:
     logging.info(f'merged config: {cfg}')
     uid = os.getuid()
     gid = os.getgid()
-    user = os.getlogin()
-    logging.info(f'user info: {user} {uid}:{gid}')
+    logging.info(f'user info: {uid}:{gid}')
 
     if cfg.ymir.run_training:
         _run_training(cfg)
