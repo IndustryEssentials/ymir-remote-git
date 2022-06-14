@@ -8,6 +8,7 @@ from typing import Any, List, Tuple
 import numpy as np
 import torch
 import yaml
+import shutil
 from easydict import EasyDict as edict
 from nptyping import NDArray, Shape, UInt8
 from ymir_exc import env
@@ -131,11 +132,11 @@ class YmirYolov5():
     def init_detector(self, device: torch.device) -> DetectMultiBackend:
         weights = get_weight_file(self.cfg)
 
-        data_ymal = osp.join(self.cfg.ymir.output.root_dir, 'data.yaml')
+        data_yaml = osp.join(self.cfg.ymir.output.root_dir, 'data.yaml')
         model = DetectMultiBackend(weights=weights,
                                    device=device,
                                    dnn=False,  # not use opencv dnn for onnx inference
-                                   data=data_ymal)  # dataset.yaml path
+                                   data=data_yaml)  # dataset.yaml path
 
         return model
 
@@ -198,12 +199,16 @@ class YmirYolov5():
 def convert_ymir_to_yolov5(cfg: edict) -> None:
     """
     convert ymir format dataset to yolov5 format
-    output_root_dir: the output root dir
+    generate data.yaml for training/mining/infer
     """
-    data = dict(path=cfg.ymir.input.root_dir,
-                train=cfg.ymir.input.training_index_file,
-                val=cfg.ymir.input.val_index_file,
-                test=cfg.ymir.input.candidate_index_file,
+    for prefix in ['training','val','candidate']:
+        if osp.exists(cfg.ymir.input[f'{prefix}_index_file']):
+            shutil.copy(cfg.ymir.input[f'{prefix}_index_file'], f'/{cfg.ymir.output.root_dir}/{prefix}.tsv')
+
+    data = dict(path=cfg.ymir.output.root_dir,
+                train='training.tsv',
+                val='val.tsv',
+                test='candidate.tsv',
                 nc=len(cfg.param.class_names),
                 names=cfg.param.class_names)
 
