@@ -2,13 +2,13 @@
 function for combine ymir and yolov5
 """
 import os.path as osp
+import shutil
 from enum import IntEnum
 from typing import Any, List, Tuple
 
 import numpy as np
 import torch
 import yaml
-import shutil
 from easydict import EasyDict as edict
 from nptyping import NDArray, Shape, UInt8
 from ymir_exc import env
@@ -201,9 +201,10 @@ def convert_ymir_to_yolov5(cfg: edict) -> None:
     convert ymir format dataset to yolov5 format
     generate data.yaml for training/mining/infer
     """
-    for prefix in ['training','val','candidate']:
-        if osp.exists(cfg.ymir.input[f'{prefix}_index_file']):
-            shutil.copy(cfg.ymir.input[f'{prefix}_index_file'], f'/{cfg.ymir.output.root_dir}/{prefix}.tsv')
+    for prefix in ['training', 'val', 'candidate']:
+        src_file = getattr(cfg.ymir.input, f'{prefix}_index_file')
+        if osp.exists(src_file):
+            shutil.copy(src_file, f'/{cfg.ymir.output.root_dir}/{prefix}.tsv')
 
     data = dict(path=cfg.ymir.output.root_dir,
                 train='training.tsv',
