@@ -201,17 +201,16 @@ def convert_ymir_to_yolov5(cfg: edict) -> None:
     convert ymir format dataset to yolov5 format
     generate data.yaml for training/mining/infer
     """
-    for prefix in ['training', 'val', 'candidate']:
-        src_file = getattr(cfg.ymir.input, f'{prefix}_index_file')
-        if osp.exists(src_file):
-            shutil.copy(src_file, f'/{cfg.ymir.output.root_dir}/{prefix}.tsv')
 
     data = dict(path=cfg.ymir.output.root_dir,
-                train='training.tsv',
-                val='val.tsv',
-                test='candidate.tsv',
                 nc=len(cfg.param.class_names),
                 names=cfg.param.class_names)
+    for split, prefix in zip(['train', 'val', 'test'], ['training', 'val', 'candidate']):
+        src_file = getattr(cfg.ymir.input, f'{prefix}_index_file')
+        if osp.exists(src_file):
+            shutil.copy(src_file, f'{cfg.ymir.output.root_dir}/{split}.tsv')
+
+        data[split] = f'{split}.tsv'
 
     with open(osp.join(cfg.ymir.output.root_dir, 'data.yaml'), 'w') as fw:
         fw.write(yaml.safe_dump(data))
