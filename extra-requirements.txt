@@ -1,6 +1,4 @@
 easydict
-torch
-torchvision
-tensorboard
+tensorboardX
 PyYAML
 tqdm

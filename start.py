@@ -5,11 +5,9 @@ import sys
 import time
 from typing import List
 
-import torch
-import torchvision
 import yaml
 from easydict import EasyDict as edict
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
@@ -96,14 +94,10 @@ def _run_training(cfg: edict) -> None:
 
     # suppose we have a long time training, and have saved the final model
     # use `cfg.ymir.output.models_dir` to get model output dir
-    if model == 'vgg11':
-        m = torchvision.models.vgg11(pretrained=False)
-    else:
-        m = torchvision.models.vgg13(pretrained=False)
-
     models_dir = cfg.ymir.output.models_dir
     os.makedirs(models_dir, exist_ok=True)
-    torch.save(m, os.path.join(models_dir, f'{model}.pt'))
+    model_weight = os.path.join(models_dir, f'{model}.pt')
+    os.system(f'touch {model_weight}')
 
     # write other information
     with open(os.path.join(models_dir, 'model.yaml'), 'w') as f:
