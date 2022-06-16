@@ -7,14 +7,14 @@ from typing import List
 
 import yaml
 from easydict import EasyDict as edict
+
+# view https://github.com/protocolbuffers/protobuf/issues/10051 for detail
+os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
-
-# view https://github.com/protocolbuffers/protobuf/issues/10051 for detail
-os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
 
 
 def get_merged_config() -> edict:
