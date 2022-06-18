@@ -2,6 +2,7 @@
 function for combine ymir and yolov5
 """
 import os.path as osp
+import shutil
 from enum import IntEnum
 from typing import Any, List, Tuple
 
@@ -131,10 +132,11 @@ class YmirYolov5():
     def init_detector(self, device: torch.device) -> DetectMultiBackend:
         weights = get_weight_file(self.cfg)
 
+        data_yaml = osp.join(self.cfg.ymir.output.root_dir, 'data.yaml')
         model = DetectMultiBackend(weights=weights,
                                    device=device,
                                    dnn=False,  # not use opencv dnn for onnx inference
-                                   data='data.yaml')  # dataset.yaml path
+                                   data=data_yaml)  # dataset.yaml path
 
         return model
 
@@ -194,19 +196,23 @@ class YmirYolov5():
         return anns
 
 
-def convert_ymir_to_yolov5(cfg: edict, output_root_dir: str) -> None:
+def convert_ymir_to_yolov5(cfg: edict) -> None:
     """
     convert ymir format dataset to yolov5 format
-    output_root_dir: the output root dir
+    generate data.yaml for training/mining/infer
     """
-    data = dict(path=cfg.ymir.input.root_dir,
-                train=cfg.ymir.input.training_index_file,
-                val=cfg.ymir.input.val_index_file,
-                test=cfg.ymir.input.candidate_index_file,
+
+    data = dict(path=cfg.ymir.output.root_dir,
                 nc=len(cfg.param.class_names),
                 names=cfg.param.class_names)
+    for split, prefix in zip(['train', 'val', 'test'], ['training', 'val', 'candidate']):
+        src_file = getattr(cfg.ymir.input, f'{prefix}_index_file')
+        if osp.exists(src_file):
+            shutil.copy(src_file, f'{cfg.ymir.output.root_dir}/{split}.tsv')
 
-    with open(osp.join(output_root_dir, 'data.yaml'), 'w') as fw:
+        data[split] = f'{split}.tsv'
+
+    with open(osp.join(cfg.ymir.output.root_dir, 'data.yaml'), 'w') as fw:
         fw.write(yaml.safe_dump(data))
 
 
