@@ -84,7 +84,7 @@ def _run_training(cfg: edict) -> None:
             lines = fp.readlines()
             for line in lines:
                 class_id, x1, y1, x2, y2 = [int(s)
-                                            for s in line.strip().split(',')]
+                                            for s in line.strip().split(',')[0:5]]
                 name = class_names[class_id]
                 logging.info(f"{name} xmin={x1} ymin={y1} xmax={x2} ymax={y2}")
         break
