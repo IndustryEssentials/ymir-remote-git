@@ -875,7 +875,7 @@ def extract_boxes(path=DATASETS_DIR / 'coco128'):  # from utils.datasets import 
             lb_file = Path(img2label_paths([str(im_file)])[0])
             if Path(lb_file).exists():
                 with open(lb_file) as f:
-                    lb = np.array([x.split() for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
+                    lb = np.array([x.split()[0:5] for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
 
                 for j, x in enumerate(lb):
                     c = int(x[0])  # class
@@ -939,7 +939,7 @@ def verify_image_label(args):
         if os.path.isfile(lb_file):
             nf = 1  # label found
             with open(lb_file) as f:
-                lb = [x.split(',') for x in f.read().strip().splitlines() if len(x)]
+                lb = [x.split(',')[0:5] for x in f.read().strip().splitlines() if len(x)]
 
             nl = len(lb)
             if nl:
