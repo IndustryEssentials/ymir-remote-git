@@ -3,7 +3,7 @@
 ![](./ymir-live-code-executor.png)
 利用同一个live-code-executor镜像，运行多份训练/挖掘/推理的代码。
 
-- [live-code-executor](https://github.com/IndustryEssentials/ymir-executor/live-code-executor) 支持在线运行的ymir镜像
+- [live-code-executor](https://github.com/IndustryEssentials/ymir-executor/tree/master/live-code-executor) 支持在线运行的ymir镜像
 - [live-code](https://github.com/IndustryEssentials/ymir-remote-git) 支持ymir镜像在线运行的代码库
 - [ymir-executor](https://github.com/IndustryEssentials/ymir-executor) ymir镜像库
 - [ymir-executor api](https://github.com/IndustryEssentials/ymir/blob/master/docs/ymir-cmd-container.md)
@@ -32,9 +32,11 @@
 - ymir-remote-git/ymir-remote-v7.0: 以yolov5-v7.0版本为基础，演示`ymir-remote-git`的训练，挖掘与推理功能
     - configs/default.yaml: "code_config”文件
     - utils/ymir_yolov5.py: ymir所需的一些功能函数
+    - utils/dataloaders.py: 修改dataloader以支持ymir
     - train.py: 在yolov5框架上进行一些保存路径修改，ymir进度汇报等
     - mining/data_augment.py: 挖掘算法所需的数据增加功能函数
     - mining/mining_cald.py: 挖掘算法主程序
+    - extra-requirements.txt: python 依赖文件
     - start.py：训练/挖掘/推理的启动程序
 
 ## FAQ
@@ -48,4 +50,4 @@
 
 - 如何制作个人的live-code-executor?
 
-    参考[live-code-executor](https://github.com/IndustryEssentials/ymir-executor/live-code-executor)，制作相应的dockerfile与镜像。
+    参考[live-code-executor](https://github.com/IndustryEssentials/ymir-executor/tree/master/live-code-executor)，制作相应的dockerfile与镜像。
