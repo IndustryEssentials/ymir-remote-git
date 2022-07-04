@@ -22,12 +22,12 @@ def start() -> int:
 
     if cfg.ymir.run_training:
         _run_training(cfg)
-    elif cfg.ymir.run_mining:
-        _run_mining(cfg)
-    elif cfg.ymir.run_infer:
-        _run_infer(cfg)
     else:
-        logging.warning('no task running')
+        if cfg.ymir.run_mining:
+            _run_mining(cfg)
+
+        if cfg.ymir.run_infer:
+            _run_infer(cfg)
 
     return 0
 
