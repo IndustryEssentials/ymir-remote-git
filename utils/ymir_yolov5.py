@@ -79,12 +79,12 @@ def get_merged_config() -> edict:
 def get_weight_file(cfg: edict) -> str:
     """
     return the weight file path by priority
-    find weight file in cfg.param.model_params_path or cfg.param.model_params_path
+    find weight file in cfg.param.pretrained_model_params or cfg.param.model_params_path
     """
     if cfg.ymir.run_training:
         model_params_path = cfg.param.get('pretrained_model_params', [])
     else:
-        model_params_path = cfg.param.get('model_params_path', [])
+        model_params_path = cfg.param.model_params_path
 
     model_dir = osp.join(cfg.ymir.input.root_dir,
                          cfg.ymir.input.models_dir)
